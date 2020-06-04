@@ -122,119 +122,102 @@ def csv2shp(input_csv_file, outfile_path, delim=',', source_crs='epsg:4326', tar
     gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path)
 
 
-def add_attribute_gwsi(input_gwsi_file, input_gw_csv_file, out_gw_shp_file, attribute='AF Pumped', **kwargs):
+def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_file, fill_attr='AF Pumped',
+                           filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
     """
-    Add an attribute present in the GW csv file to the GWSI shape file based on matching ids given in kwargs.
-    By default, the GW withdrwal is added.
-    The csv ids must include: csv_well_id1, csv_mov_id, csv_water_id, movement_type, water_type, The shp id must include
-    shp_well_id.
-    For the Arizona datasets, csv_well_id1='Well Id', csv_well_id2='CADASTRAL', csv_mov_id='Movement Type',
-    csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', shp_well_id1='REG_ID'and
-    shp_well_id2='LOCAL_ID' by default.
-    For changing, pass appropriate kwargs
-    :param input_gwsi_file: Input GWSI shapefile
+    Add an attribute present in the GW csv file to the Well Registry shape file based on matching ids given in kwargs.
+    By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
+    movement_type, water_type, The shp id must include shp_well_id. For the Arizona datasets, csv_well_id='Well Id',
+    csv_mov_id='Movement Type', csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', and
+    shp_well_id='REGISTRY_I' by default. For changing, pass appropriate kwargs.
+    :param input_well_reg_file: Input Well Registry shapefile
     :param input_gw_csv_file: Input GW csv file
     :param out_gw_shp_file: Output GWSI shapefile having GW withdrawal data
-    :param attribute: Attribute present in the CSV file to add to GWSI
+    :param fill_attr: Attribute present in the CSV file to add to Well Registry
+    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr_value: Value for filter_attr
     :return: None
     """
 
-    gwsi_gdf = gpd.read_file(input_gwsi_file)
+    well_reg_gdf = gpd.read_file(input_well_reg_file)
     gw_df = pd.read_csv(input_gw_csv_file)
-    csv_well_id1 = 'Well Id'
-    csv_well_id2 = 'CADASTRAL'
+    csv_well_id = 'Well Id'
     csv_mov_id = 'Movement Type'
     csv_water_id = 'Water Type'
     movement_type = 'WITHDRAWAL'
     water_type = 'GROUNDWATER'
-    shp_well_id1 = 'REG_ID'
-    shp_well_id2 = 'LOCAL_ID'
+    shp_well_id = 'REGISTRY_I'
     if kwargs:
-        csv_well_id1 = kwargs['csv_well_id1']
-        csv_well_id2 = kwargs['csv_well_id2']
+        csv_well_id = kwargs['csv_well_id']
         movement_type = kwargs['movement_type']
         water_type = kwargs['water_type']
-        shp_well_id1 = kwargs['shp_well_id1']
-        shp_well_id2 = kwargs['shp_well_id2']
-    # csv_id_list = list(set(gw_df[csv_well_id2]))
-    # shp_id_list = list(set(gwsi_gdf[shp_well_id2]))
-    # count = 0
-    # var_name = input_gw_csv_file[input_gw_csv_file.rfind(os.sep) + 1: input_gw_csv_file.rfind('.')]
-    # var_name1 = var_name + '_C'
-    # for cid in csv_id_list:
-    #     for sid in shp_id_list:
-    #         if cid == sid:
-    #             count += 1
-    # print(var_name1, len(csv_id_list), count)
-    #
-    # csv_id_list = list(set(gw_df[csv_well_id1]))
-    # shp_id_list = list(set(gwsi_gdf[shp_well_id1]))
-    # count = 0
-    # var_name2 = var_name + '_W'
-    # for cid in csv_id_list:
-    #     for sid in shp_id_list:
-    #         if str(cid) == sid:
-    #             count += 1
-    # print(var_name2, len(csv_id_list), count)
-
-    for csv_id in set(gw_df[csv_well_id1]):
-        sub_gw_df = gw_df[(gw_df[csv_well_id1] == csv_id) & (gw_df[csv_mov_id] == movement_type) &
+        shp_well_id = kwargs['shp_well_id']
+    well_reg_gdf = well_reg_gdf[well_reg_gdf[filter_attr] != filter_attr_value]
+    for csv_id in set(gw_df[csv_well_id]):
+        sub_gw_df = gw_df[(gw_df[csv_well_id] == csv_id) & (gw_df[csv_mov_id] == movement_type) &
                           (gw_df[csv_water_id] == water_type)]
-
         if not sub_gw_df.empty:
-            gw_pumped = list(sub_gw_df[attribute])
-            if len(gw_pumped) > 1:
-                gw_pumped = np.sum(gw_pumped)
+            fill_value = list(sub_gw_df[fill_attr])
+            if len(fill_value) > 1:
+                fill_value = np.sum(fill_value)
             else:
-                gw_pumped = gw_pumped[0]
-            gwsi_gdf.loc[gwsi_gdf[shp_well_id1] == str(csv_id), attribute] = gw_pumped
-            cadastral = list(sub_gw_df[csv_well_id2])[0]
-            gwsi_gdf.loc[gwsi_gdf[shp_well_id2] == cadastral, attribute] = gw_pumped
-    gwsi_gdf.to_file(out_gw_shp_file)
+                fill_value = fill_value[0]
+            csv_id_modified = str(csv_id)
+            if len(csv_id_modified) == 5:
+                csv_id_modified = '0' + csv_id_modified
+            well_reg_gdf.loc[well_reg_gdf[shp_well_id] == csv_id_modified, fill_attr] = fill_value
+    well_reg_gdf = well_reg_gdf[well_reg_gdf[fill_attr] > 0]
+    well_reg_gdf.to_file(out_gw_shp_file)
+    print(input_gw_csv_file, ': Matched wells:', well_reg_gdf.count()[shp_well_id])
 
 
-def add_attribute_gwsi_multiple(input_gwsi_file, input_gw_csv_dir, out_gw_shp_dir, attribute='AF Pumped', **kwargs):
+def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_gw_shp_dir, fill_attr='AF Pumped',
+                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
     """
-    Add an attribute present in the GW csv file to the GWSI shape file based on matching ids given in kwargs.
-    By default, the GW withdrwal is added.
-    The csv ids must include: csv_well_id, csv_mov_id, csv_water_id, movement_type, water_type, The shp id must include
-    shp_well_id.
-    For the Arizona datasets, csv_well_id='CADASTRAL', csv_mov_id='Movement Type', csv_water_id='Water Type',
-    movement_type='WITHDRAWAL', water_type='GROUNDWATER', and shp_well_id='LOCAL_ID' by default.
-    For changing, pass appropriate kwargs
-    :param input_gwsi_file: Input GWSI shapefile
+    Add an attribute present in the GW csv file to the Well Registry shape files (yearwise) based on matching ids given
+    in kwargs. By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
+    movement_type, water_type, The shp id must include shp_well_id. For the Arizona datasets, csv_well_id='Well Id',
+    csv_mov_id='Movement Type', csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', and
+    shp_well_id='REGISTRY_I' by default. For changing, pass appropriate kwargs.
+    :param input_well_reg_file: Input Well Registry shapefile
     :param input_gw_csv_dir: Input GW csv directory
-    :param out_gw_shp_dir: Output GWSI shapefile directory having GW withdrawal data
-    :param attribute: Attribute present in the CSV file to add to GWSI
+    :param out_gw_shp_dir: Output Well Registry shapefile directory having GW withdrawal data
+    :param fill_attr: Attribute present in the CSV file to add to Well Registry
+    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr_value: Value for filter_attr
     :return: None
     """
 
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parallel_add_attribute_gwsi)(input_gwsi_file, input_gw_csv_file, out_gw_shp_dir,
-                                                                    attribute, **kwargs)
+    print('Updating Well Registry shapefiles...\n')
+    Parallel(n_jobs=num_cores)(delayed(parallel_add_attribute_well_reg)(input_well_reg_file, input_gw_csv_file,
+                                                                        out_gw_shp_dir, fill_attr, filter_attr,
+                                                                        filter_attr_value, **kwargs)
                                for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
 
 
-def parallel_add_attribute_gwsi(input_gwsi_file, input_gw_csv_file, out_gw_shp_dir, attribute='AF Pumped', **kwargs):
+def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_dir, fill_attr='AF Pumped',
+                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
     """
-    Add an attribute present in the GW csv file to the GWSI shape file based on matching ids given in kwargs.
-    By default, the GW withdrwal is added.
-    The csv ids must include: csv_well_id, csv_mov_id, csv_water_id, movement_type, water_type, The shp id must include
-    shp_well_id.
-    For the Arizona datasets, csv_well_id='CADASTRAL', csv_mov_id='Movement Type', csv_water_id='Water Type',
-    movement_type='WITHDRAWAL', water_type='GROUNDWATER', and shp_well_id='LOCAL_ID' by default.
-    For changing, pass appropriate kwargs
-    :param input_gwsi_file: Input GWSI shapefile
+    Add an attribute present in the GW csv file to the Well Registry shape files (yearwise) based on matching ids given
+    in kwargs. By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
+    movement_type, water_type, The shp id must include shp_well_id. For the Arizona datasets, csv_well_id='Well Id',
+    csv_mov_id='Movement Type', csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', and
+    shp_well_id='REGISTRY_I' by default. For changing, pass appropriate kwargs. This function should be called from
+    #add_attribute_well_reg_multiple(...)
+    :param input_well_reg_file: Input well registry shapefile
     :param input_gw_csv_file: Input GW csv file
     :param out_gw_shp_dir: Output GWSI shapefile directory having GW withdrawal data
-    :param attribute: Attribute present in the CSV file to add to GWSI
+    :param fill_attr: Attribute present in the CSV file to add to Well Registry
+    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr_value: Value for filter_attr
     :return: None
     """
 
-    out_gwsi_file = out_gw_shp_dir + input_gw_csv_file[input_gw_csv_file.rfind(os.sep) + 1:
-                                                       input_gw_csv_file.rfind('.')] + '.shp'
-    # print('\nWorking with', input_gw_csv_file, '...\n')
-    add_attribute_gwsi(input_gwsi_file, input_gw_csv_file, out_gwsi_file, attribute=attribute, **kwargs)
+    out_well_reg_file = out_gw_shp_dir + input_gw_csv_file[input_gw_csv_file.rfind(os.sep) + 1:
+                                                           input_gw_csv_file.rfind('.')] + '.shp'
+    add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_well_reg_file, fill_attr, filter_attr,
+                           filter_attr_value, **kwargs)
 
 
 def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):

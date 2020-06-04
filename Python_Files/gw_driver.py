@@ -13,7 +13,7 @@ from glob import glob
 class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, input_cdl_file, gdal_path, input_gmd_file=None, input_gwsi_file=None):
+                 input_state_file, input_cdl_file, gdal_path, input_gmd_file=None, input_well_reg_file=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -22,8 +22,8 @@ class HydroML:
         :param input_ts_dir: Input directory containing the time series data
         :param output_shp_dir: Output shapefile directory
         :param output_gw_raster_dir: Output GW raster directory
-        :param input_gmd_file: Input GMD file, set None for Arizona
-        :param input_gwsi_file: Input GWSI file, set None for Kansas
+        :param input_gmd_file: Input GMD shapefile, set None for Arizona
+        :param input_well_reg_file: Input Well Registry shapefile, set None for Kansas
         :param input_state_file: Input state shapefile
         :param input_cdl_file: Input NASS CDL file path
         :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
@@ -38,7 +38,7 @@ class HydroML:
         self.output_gw_raster_dir = make_proper_dir_name(output_gw_raster_dir)
         self.gdal_path = make_proper_dir_name(gdal_path)
         self.input_gmd_file = input_gmd_file
-        self.input_gwsi_file = input_gwsi_file
+        self.input_well_reg_file = input_well_reg_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.input_gmd_reproj_file = None
@@ -52,16 +52,27 @@ class HydroML:
         self.rf_data_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
-    def preprocess_gw_csv(self, input_gw_csv_dir):
+    def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr='AMA',
+                          filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
         """
-        Convert CSV files to shapefiles using GWSI file
-        :param input_gw_csv_dir: Input GW CSV dir for Arizona
+        Preprocess the well registry file to add GW pumping from each CSV file. That is, add an attribute present in the
+        GW csv file to the Well Registry shape files (yearwise) based on matching ids given in kwargs.
+        By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
+        movement_type, water_type, The shp id must include shp_well_id. For the Arizona datasets, csv_well_id='Well Id',
+        csv_mov_id='Movement Type', csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', and
+        shp_well_id='REGISTRY_I' by default. For changing, pass appropriate kwargs.
+        :param input_gw_csv_dir: Input GW csv directory
+        :param fill_attr: Attribute present in the CSV file to add to Well Registry
+        :param filter_attr: Remove specific wells based on this attribute
+        :param filter_attr_value: Value for filter_attr
         :return: None
         """
 
         input_gw_csv_dir = make_proper_dir_name(input_gw_csv_dir)
-        vops.add_attribute_gwsi_multiple(input_gwsi_file=self.input_gwsi_file, input_gw_csv_dir=input_gw_csv_dir,
-                                         out_gw_shp_dir=self.output_shp_dir)
+        vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_well_reg_file,
+                                             input_gw_csv_dir=input_gw_csv_dir, out_gw_shp_dir=self.output_shp_dir,
+                                             fill_attr=fill_attr, filter_attr=filter_attr,
+                                             filter_attr_value=filter_attr_value, **kwargs)
 
     def extract_shp_from_gdb(self, input_gdb_dir, year_list, attr_name='AF_USED', already_extracted=False):
         """
@@ -459,7 +470,7 @@ def run_gw_az(load_files=True, load_rf_model=False):
     input_ts_dir = input_dir + 'GEE_Data_' + gee_data[0]
     output_shp_dir = file_dir + 'GW_Shapefiles/'
     output_gw_raster_dir = file_dir + 'GW_Rasters/'
-    input_gwsi_file = input_dir + 'GWSI/GWSI_Sites-shp/GWSI_Sites.shp'
+    input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
     input_cdl_file = input_dir + 'CDL/CDL_AZ_2015.tif'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
@@ -479,7 +490,7 @@ def run_gw_az(load_files=True, load_rf_model=False):
     drop_attrs = ('YEAR',)
     pred_attr = 'GW'
     gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir, input_state_file,
-                 input_cdl_file, gdal_path, input_gwsi_file=input_gwsi_file)
+                 input_cdl_file, gdal_path, input_well_reg_file=input_well_reg_file)
     gw.preprocess_gw_csv(input_gw_csv_dir)
 
 
