@@ -13,7 +13,7 @@ from glob import glob
 class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, input_cdl_file, gdal_path, input_gmd_file=None, input_well_reg_file=None):
+                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -22,8 +22,7 @@ class HydroML:
         :param input_ts_dir: Input directory containing the time series data
         :param output_shp_dir: Output shapefile directory
         :param output_gw_raster_dir: Output GW raster directory
-        :param input_gmd_file: Input GMD shapefile, set None for Arizona
-        :param input_well_reg_file: Input Well Registry shapefile, set None for Kansas
+        :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
         :param input_state_file: Input state shapefile
         :param input_cdl_file: Input NASS CDL file path
         :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
@@ -37,11 +36,10 @@ class HydroML:
         self.output_shp_dir = make_proper_dir_name(output_shp_dir)
         self.output_gw_raster_dir = make_proper_dir_name(output_gw_raster_dir)
         self.gdal_path = make_proper_dir_name(gdal_path)
-        self.input_gmd_file = input_gmd_file
-        self.input_well_reg_file = input_well_reg_file
+        self.input_gw_boundary_file = input_gw_boundary_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
-        self.input_gmd_reproj_file = None
+        self.input_gw_boundary_reproj_file = None
         self.input_state_reproj_file = None
         self.final_gw_dir = None
         self.ref_raster = None
@@ -69,7 +67,7 @@ class HydroML:
         """
 
         input_gw_csv_dir = make_proper_dir_name(input_gw_csv_dir)
-        vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_well_reg_file,
+        vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_gw_boundary_file,
                                              input_gw_csv_dir=input_gw_csv_dir, out_gw_shp_dir=self.output_shp_dir,
                                              fill_attr=fill_attr, filter_attr=filter_attr,
                                              filter_attr_value=filter_attr_value, **kwargs)
@@ -92,20 +90,20 @@ class HydroML:
 
     def reproject_shapefiles(self, already_reprojected=False):
         """
-        Reproject GMD and state shapefiles
+        Reproject GMD/Well Registry and state shapefiles
         :param already_reprojected: Set True to disable reprojection
         :return: None
         """
 
-        gmd_reproj_dir = make_proper_dir_name(self.file_dir + 'gmds/reproj')
+        gw_boundary_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_boundary/reproj')
         state_reproj_dir = make_proper_dir_name(self.file_dir + 'state/reproj')
-        self.input_gmd_reproj_file = gmd_reproj_dir + 'input_gmd_reproj.shp'
+        self.input_gw_boundary_reproj_file = gw_boundary_reproj_dir + 'input_boundary_reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
-            makedirs([gmd_reproj_dir, state_reproj_dir])
+            makedirs([gw_boundary_reproj_dir, state_reproj_dir])
             ref_shp = glob(self.output_shp_dir + '*.shp')[0]
-            vops.reproject_vector(self.input_gmd_file, outfile_path=self.input_gmd_reproj_file, ref_file=ref_shp,
-                                  raster=False)
+            vops.reproject_vector(self.input_gw_boundary_file, outfile_path=self.input_gw_boundary_reproj_file,
+                                  ref_file=ref_shp, raster=False)
             vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
                                   raster=False)
         else:
@@ -122,7 +120,7 @@ class HydroML:
         :return: None
         """
 
-        clip_file = self.input_gmd_reproj_file
+        clip_file = self.input_gw_boundary_reproj_file
         if new_clip_file:
             clip_file = new_clip_file
         clip_shp_dir = make_proper_dir_name(self.output_shp_dir + 'Clipped')
@@ -437,8 +435,8 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
     drop_attrs = ('YEAR',)
     pred_attr = 'GW'
     if not analyze_only:
-        gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, input_state_file, input_cdl_file,
-                     gdal_path, output_gw_raster_dir, input_gmd_file=input_gmd_file)
+        gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
+                     input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_gmd_file)
         gw.extract_shp_from_gdb(input_gdb_dir, year_list=range(2002, 2019), already_extracted=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files)
@@ -490,9 +488,9 @@ def run_gw_az(load_files=True, load_rf_model=False):
     drop_attrs = ('YEAR',)
     pred_attr = 'GW'
     gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir, input_state_file,
-                 input_cdl_file, gdal_path, input_well_reg_file=input_well_reg_file)
+                 input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file)
     gw.preprocess_gw_csv(input_gw_csv_dir)
 
 
-# run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
+# run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
 run_gw_az(load_files=False, load_rf_model=False)
