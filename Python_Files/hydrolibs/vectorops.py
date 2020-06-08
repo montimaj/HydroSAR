@@ -166,7 +166,6 @@ def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_fi
             if len(csv_id_modified) == 5:
                 csv_id_modified = '0' + csv_id_modified
             well_reg_gdf.loc[well_reg_gdf[shp_well_id] == csv_id_modified, fill_attr] = fill_value
-    well_reg_gdf = well_reg_gdf[well_reg_gdf[fill_attr] > 0]
     well_reg_gdf.to_file(out_gw_shp_file)
     print(input_gw_csv_file, ': Matched wells:', well_reg_gdf.count()[shp_well_id])
 
@@ -238,12 +237,13 @@ def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
         reproject_vector(outfile_path, outfile_path=outfile_path, crs=target_crs, crs_from_file=False, ref_file=None)
 
 
-def shp2raster(input_shp_file, outfile_path, value_field_pos=2, xres=1000., yres=1000., gridding=True, smoothing=4800,
-               gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0, xres=1000., yres=1000., gridding=True,
+               smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert Shapefile to Raster TIFF file
     :param input_shp_file: Input Shapefile path
     :param outfile_path: Output TIFF file path
+    :param value_field: Name of the value attribute. Set None to use value_field_pos
     :param value_field_pos: Value field position (zero indexing)
     :param xres: Pixel width in geographic units
     :param yres: Pixel height in geographic units
@@ -258,7 +258,8 @@ def shp2raster(input_shp_file, outfile_path, value_field_pos=2, xres=1000., yres
     ext_pos = input_shp_file.rfind('.')
     layer_name = input_shp_file[input_shp_file.rfind(os.sep) + 1: ext_pos]
     shp_file = gpd.read_file(input_shp_file)
-    value_field = shp_file.columns[value_field_pos]
+    if value_field is None:
+        value_field = shp_file.columns[value_field_pos]
     minx, miny, maxx, maxy = shp_file.geometry.total_bounds
     no_data_value = NO_DATA_VALUE
     gdal_command = 'gdal_rasterize'
@@ -277,8 +278,7 @@ def shp2raster(input_shp_file, outfile_path, value_field_pos=2, xres=1000., yres
     subprocess.call(sys_call)
 
 
-def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', delim=',',
-              long_lat_pos=(7, 8)):
+def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', delim=',', long_lat_pos=(7, 8)):
     """
     Convert all CSV files present in a folder to corresponding Shapefiles
     :param input_dir: Input directory containing csv files which are named as <Layer_Name>_<Year>.[csv|txt]
@@ -295,12 +295,13 @@ def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', de
         csv2shp(file, outfile_path=outfile_path, delim=delim, target_crs=target_crs, long_lat_pos=long_lat_pos)
 
 
-def shps2rasters(input_dir, output_dir, value_field_pos=0, xres=1000, yres=1000, gridding=True, smoothing=4800,
-                 gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+def shps2rasters(input_dir, output_dir, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
+                 smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert all shapefiles to corresponding TIFF files
     :param input_dir: Input directory containing Shapefiles which are named as <Layer_Name>_<Year>.shp
     :param output_dir: Output directory
+    :param value_field: Name of the value attribute. Set None to use value_field_pos
     :param value_field_pos: Value field position (zero indexing)
     :param xres: Pixel width in geographic units
     :param yres: Pixel height in geographic units
@@ -313,18 +314,19 @@ def shps2rasters(input_dir, output_dir, value_field_pos=0, xres=1000, yres=1000,
     """
 
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir,
+    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir, value_field=value_field,
                                                             value_field_pos=value_field_pos, xres=xres, yres=yres,
                                                             gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
                                for shp_file in glob(input_dir + '*.shp'))
 
 
-def parallel_shp2raster(shp_file, output_dir, value_field_pos=0, xres=1000, yres=1000, gridding=True, smoothing=4800,
-                        gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+def parallel_shp2raster(shp_file, output_dir, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
+                        smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Use this from #shp2rasters to parallelize raster creation
     :param shp_file: Input shapefile
     :param output_dir: Output directory
+    :param value_field: Name of the value attribute. Set None to use value_field_pos
     :param value_field_pos: Value field position (zero indexing)
     :param xres: Pixel width in geographic units
     :param yres: Pixel height in geographic units
@@ -337,8 +339,8 @@ def parallel_shp2raster(shp_file, output_dir, value_field_pos=0, xres=1000, yres
     """
 
     outfile_path = output_dir + shp_file[shp_file.rfind(os.sep) + 1: shp_file.rfind('.') + 1] + 'tif'
-    shp2raster(shp_file, outfile_path=outfile_path, value_field_pos=value_field_pos, xres=xres, yres=yres,
-               gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
+    shp2raster(shp_file, outfile_path=outfile_path, value_field=value_field, value_field_pos=value_field_pos, xres=xres,
+               yres=yres, gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
 
 
 def extract_gdb_data(input_gdb_dir, attr_name, year_list, outdir, source_crs='epsg:4326', target_crs='epsg:4326',

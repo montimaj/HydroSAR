@@ -16,6 +16,7 @@ from joblib import Parallel, delayed
 from rasterio.plot import plotting_extent
 from rasterio.mask import mask
 from shapely.geometry import mapping
+from shapely.geometry import Point
 from collections import defaultdict
 from datetime import datetime
 from glob import glob
@@ -80,7 +81,7 @@ def write_raster(raster_data, raster_file, transform, outfile_path, no_data_valu
 
 
 def crop_raster(input_raster_file, input_mask_path, outfile_path, plot_fig=False, plot_title="", ext_mask=True,
-                gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', verbose=True):
+                gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
     """
     Crop raster data based on given shapefile
     :param input_raster_file: Input raster dataset path
@@ -91,42 +92,58 @@ def crop_raster(input_raster_file, input_mask_path, outfile_path, plot_fig=False
     :param ext_mask: Set true to extract raster by mask file
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param multi_poly: Set True if input_mask_file has multiple polygons/features
     :param verbose: Set True to print system call info 
-    :return: Cropped raster dataset (if ext_mask is False)
+    :return: None
     """
 
-    if ext_mask:
-        src_raster_file = gdal.Open(input_raster_file)
-        src_band = src_raster_file.GetRasterBand(1)
-        transform = src_raster_file.GetGeoTransform()
-        xres, yres = transform[1], transform[5]
-        no_data = src_band.GetNoDataValue()
-        os_sep = input_mask_path.rfind(os.sep)
-        if os_sep == -1:
-            os_sep = input_mask_path.rfind('/')
-        layer_name = input_mask_path[os_sep + 1: input_mask_path.rfind('.')]
-        args = ['-tr', str(xres), str(yres), '-tap', '-cutline', input_mask_path, '-cl', layer_name,
-                '-crop_to_cutline', '-dstnodata', str(no_data), '-overwrite', '-ot', 'Float32', '-of', 'GTiff',
-                input_raster_file, outfile_path]
-        sys_call = make_gdal_sys_call_str(gdal_path=gdal_path, gdal_command='gdalwarp', args=args, verbose=verbose)
-        subprocess.call(sys_call)
+    if multi_poly:
+        mask_shp_file = gpd.read_file(input_mask_path)
+        raster_arr, raster_file = read_raster_as_arr(input_raster_file)
+        for idx, value in np.ndenumerate(raster_arr):
+            gx, gy = raster_file.xy(idx[0], idx[1])
+            gp = Point(gx, gy)
+            check_flag = False
+            for poly in mask_shp_file['geometry']:
+                if poly.contains(gp):
+                    check_flag = True
+                    break
+            if not check_flag:
+                raster_arr[idx] = np.nan
+        raster_arr[np.isnan(raster_arr)] = NO_DATA_VALUE
+        write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=outfile_path)
     else:
-        shape_file = gpd.read_file(input_mask_path)
-        shape_file_geom = mapping(shape_file['geometry'][0])
-        raster_file = rio.open(input_raster_file)
-        raster_crop, raster_transform = mask(raster_file, [shape_file_geom], crop=True)
-        shape_extent = plotting_extent(raster_crop[0], raster_transform)
-        raster_crop = np.squeeze(raster_crop)
-        write_raster(raster_crop, raster_file, transform=raster_transform, outfile_path=outfile_path,
-                     no_data_value=raster_file.nodata)
-        if plot_fig:
-            fig, ax = plt.subplots(figsize=(10, 8))
-            raster_plot = ax.imshow(raster_crop[0], extent=shape_extent)
-            ax.set_title(plot_title)
-            ax.set_axis_off()
-            fig.colorbar(raster_plot)
-            plt.show()
-        return raster_crop
+        if ext_mask:
+            src_raster_file = gdal.Open(input_raster_file)
+            src_band = src_raster_file.GetRasterBand(1)
+            transform = src_raster_file.GetGeoTransform()
+            xres, yres = transform[1], transform[5]
+            no_data = src_band.GetNoDataValue()
+            os_sep = input_mask_path.rfind(os.sep)
+            if os_sep == -1:
+                os_sep = input_mask_path.rfind('/')
+            layer_name = input_mask_path[os_sep + 1: input_mask_path.rfind('.')]
+            args = ['-tr', str(xres), str(yres), '-tap', '-cutline', input_mask_path, '-cl', layer_name,
+                    '-crop_to_cutline', '-dstnodata', str(no_data), '-overwrite', '-ot', 'Float32', '-of', 'GTiff',
+                    input_raster_file, outfile_path]
+            sys_call = make_gdal_sys_call_str(gdal_path=gdal_path, gdal_command='gdalwarp', args=args, verbose=verbose)
+            subprocess.call(sys_call)
+        else:
+            shape_file = gpd.read_file(input_mask_path)
+            shape_file_geom = mapping(shape_file['geometry'][0])
+            raster_file = rio.open(input_raster_file)
+            raster_crop, raster_transform = mask(raster_file, [shape_file_geom], crop=True)
+            shape_extent = plotting_extent(raster_crop[0], raster_transform)
+            raster_crop = np.squeeze(raster_crop)
+            write_raster(raster_crop, raster_file, transform=raster_transform, outfile_path=outfile_path,
+                         no_data_value=raster_file.nodata)
+            if plot_fig:
+                fig, ax = plt.subplots(figsize=(10, 8))
+                raster_plot = ax.imshow(raster_crop[0], extent=shape_extent)
+                ax.set_title(plot_title)
+                ax.set_axis_off()
+                fig.colorbar(raster_plot)
+                plt.show()
 
 
 def reclassify_raster(input_raster_file, class_dict, outfile_path):
@@ -362,7 +379,7 @@ def reproject_raster(input_raster_file, outfile_path, resampling_factor=1, resam
 
 
 def crop_rasters(input_raster_dir, input_mask_file, outdir, pattern='*.tif', ext_mask=True,
-                 gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', verbose=True):
+                 gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
     """
     Crop multiple rasters in a directory
     :param input_raster_dir: Directory containing raster files which are named as *_<Year>.*
@@ -372,13 +389,36 @@ def crop_rasters(input_raster_dir, input_mask_file, outdir, pattern='*.tif', ext
     :param ext_mask: Set False to extract by geometry only
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param multi_poly: Set True if input_mask_file has multiple polygons/features
     :param verbose: Set True to print system call info
     :return: None
     """
 
-    for raster_file in glob(input_raster_dir + pattern):
-        out_raster = outdir + raster_file[raster_file.rfind(os.sep) + 1:]
-        crop_raster(raster_file, input_mask_file, out_raster, ext_mask=ext_mask, gdal_path=gdal_path, verbose=verbose)
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(parallel_crop_rasters)(raster_file, input_mask_file, outdir, ext_mask, gdal_path,
+                                                              multi_poly, verbose)
+                               for raster_file in glob(input_raster_dir + pattern))
+
+
+def parallel_crop_rasters(input_raster_file, input_mask_file, outdir, ext_mask=True,
+                          gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
+    """
+    Parallely crop rasters, should be called from #crop_rasters(...)
+    :param input_raster_file: Input raster file
+    :param input_mask_file: Mask file (shapefile) used for cropping
+    :param outdir: Output directory for storing masked rasters
+    :param ext_mask: Set False to extract by geometry only
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param multi_poly: Set True if input_mask_file has multiple polygons/features
+    :param verbose: Set True to print system call info
+    :return: None
+    """
+
+    out_raster = outdir + input_raster_file[input_raster_file.rfind(os.sep) + 1:]
+    print('Cropping', input_raster_file, '...')
+    crop_raster(input_raster_file, input_mask_file, out_raster, ext_mask=ext_mask, gdal_path=gdal_path,
+                multi_poly=multi_poly, verbose=verbose)
 
 
 def smooth_rasters(input_raster_dir, ref_file, outdir, pattern='*_Masked.tif', sigma=5, normalize=False,
@@ -453,11 +493,11 @@ def apply_et_filter(input_raster_dir, ref_raster1, ref_raster2, outdir, pattern=
         filter_nans(out_raster, ref_file=ref_raster2, outfile_path=out_raster)
 
 
-def retrieve_pixel_coords(geo_coord, data_source, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', verbose=True):
+def retrieve_pixel_coords(input_raster_file, geo_coord, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', verbose=True):
     """
     Get pixels coordinates from geo-coordinates
+    :param input_raster_file: Input raster file path
     :param geo_coord: Geo-cooridnate tuple
-    :param data_source: Original GDAL reference having affine transformation parameters
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: Pixel coordinates in x and y direction (should be reversed in the caller function to get the actual pixel
@@ -465,7 +505,7 @@ def retrieve_pixel_coords(geo_coord, data_source, gdal_path='/usr/local/Cellar/g
     position)
     """
 
-    args = ['-xml', '-geoloc', data_source, str(geo_coord[0]), str(geo_coord[1])]
+    args = ['-xml', '-geoloc', input_raster_file, str(geo_coord[0]), str(geo_coord[1])]
     sys_call = make_gdal_sys_call_str(gdal_path=gdal_path, gdal_command='gdallocationinfo', args=args, verbose=verbose)
     p = subprocess.Popen(sys_call, stdout=subprocess.PIPE)
     p.wait()
@@ -540,14 +580,14 @@ def compute_rasters_from_shp(input_raster_dir, input_shp_dir, outdir, nan_fill=0
     raster_files.sort()
     shp_files.sort()
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parellel_raster_compute)(raster_file, shp_file, outdir=outdir, nan_fill=nan_fill,
+    Parallel(n_jobs=num_cores)(delayed(parallel_raster_compute)(raster_file, shp_file, outdir=outdir, nan_fill=nan_fill,
                                                                 point_arithmetic=point_arithmetic,
                                                                 value_field_pos=value_field_pos, gdal_path=gdal_path,
                                                                 verbose=verbose)
                                for raster_file, shp_file in zip(raster_files, shp_files))
 
 
-def parellel_raster_compute(raster_file, shp_file, outdir, nan_fill=0, point_arithmetic='sum', value_field_pos=0,
+def parallel_raster_compute(raster_file, shp_file, outdir, nan_fill=0, point_arithmetic='sum', value_field_pos=0,
                             gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', verbose=True):
     """
     Use this from #compute_rasters_shp to parallelize raster creation from shpfiles

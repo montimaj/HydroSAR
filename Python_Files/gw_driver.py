@@ -13,7 +13,7 @@ from glob import glob
 class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None):
+                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None, input_ama_ina_file=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -22,11 +22,12 @@ class HydroML:
         :param input_ts_dir: Input directory containing the time series data
         :param output_shp_dir: Output shapefile directory
         :param output_gw_raster_dir: Output GW raster directory
-        :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
         :param input_state_file: Input state shapefile
         :param input_cdl_file: Input NASS CDL file path
         :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
         Linux or Mac and 'C:/OSGeo4W64/' on Windows
+        :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
+        :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona. Set None for Kansas.
         """
 
         self.input_dir = make_proper_dir_name(input_dir)
@@ -37,9 +38,11 @@ class HydroML:
         self.output_gw_raster_dir = make_proper_dir_name(output_gw_raster_dir)
         self.gdal_path = make_proper_dir_name(gdal_path)
         self.input_gw_boundary_file = input_gw_boundary_file
+        self.input_ama_ina_file = input_ama_ina_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.input_gw_boundary_reproj_file = None
+        self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
         self.final_gw_dir = None
         self.ref_raster = None
@@ -51,7 +54,7 @@ class HydroML:
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr='AMA',
-                          filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
+                          filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
         """
         Preprocess the well registry file to add GW pumping from each CSV file. That is, add an attribute present in the
         GW csv file to the Well Registry shape files (yearwise) based on matching ids given in kwargs.
@@ -63,14 +66,16 @@ class HydroML:
         :param fill_attr: Attribute present in the CSV file to add to Well Registry
         :param filter_attr: Remove specific wells based on this attribute
         :param filter_attr_value: Value for filter_attr
+        :param already_preprocessed: Set True to disable preprocessing
         :return: None
         """
 
-        input_gw_csv_dir = make_proper_dir_name(input_gw_csv_dir)
-        vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_gw_boundary_file,
-                                             input_gw_csv_dir=input_gw_csv_dir, out_gw_shp_dir=self.output_shp_dir,
-                                             fill_attr=fill_attr, filter_attr=filter_attr,
-                                             filter_attr_value=filter_attr_value, **kwargs)
+        if not already_preprocessed:
+            input_gw_csv_dir = make_proper_dir_name(input_gw_csv_dir)
+            vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_gw_boundary_file,
+                                                 input_gw_csv_dir=input_gw_csv_dir, out_gw_shp_dir=self.output_shp_dir,
+                                                 fill_attr=fill_attr, filter_attr=filter_attr,
+                                                 filter_attr_value=filter_attr_value, **kwargs)
 
     def extract_shp_from_gdb(self, input_gdb_dir, year_list, attr_name='AF_USED', already_extracted=False):
         """
@@ -96,18 +101,25 @@ class HydroML:
         """
 
         gw_boundary_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_boundary/reproj')
+        gw_ama_ina_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_ama_ina/reproj')
         state_reproj_dir = make_proper_dir_name(self.file_dir + 'state/reproj')
         self.input_gw_boundary_reproj_file = gw_boundary_reproj_dir + 'input_boundary_reproj.shp'
+        if self.input_ama_ina_file:
+            self.input_ama_ina_reproj_file = gw_ama_ina_reproj_dir + 'input_ama_ina_reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
-            makedirs([gw_boundary_reproj_dir, state_reproj_dir])
+            print('Reprojecting Boundary/State/AMA_INA shapefiles...')
+            makedirs([gw_boundary_reproj_dir, gw_ama_ina_reproj_dir, state_reproj_dir])
             ref_shp = glob(self.output_shp_dir + '*.shp')[0]
             vops.reproject_vector(self.input_gw_boundary_file, outfile_path=self.input_gw_boundary_reproj_file,
                                   ref_file=ref_shp, raster=False)
+            if self.input_ama_ina_file:
+                vops.reproject_vector(self.input_ama_ina_file, outfile_path=self.input_ama_ina_reproj_file,
+                                      ref_file=ref_shp, raster=False)
             vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
                                   raster=False)
         else:
-            print('GMD and State shapefiles are already reprojected')
+            print('Boundary/State/AMA_INA shapefiles are already reprojected')
 
     def clip_gw_shpfiles(self, new_clip_file=None, already_clipped=False, extent_clip=True):
         """
@@ -133,17 +145,21 @@ class HydroML:
             print('GW Shapefiles already clipped')
         self.output_shp_dir = clip_shp_dir
 
-    def create_gw_rasters(self, xres=5000, yres=5000, max_gw=1000, raster_mask=None, crop_rasters=False, ext_mask=True,
-                          convert_units=True, already_created=True):
+    def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
+                          raster_mask=None, crop_rasters=False, ext_mask=True, use_ama_ina=False, convert_units=True,
+                          already_created=True):
         """
         Create GW rasters from shapefiles
         :param xres: X-Resolution (map unit)
         :param yres: Y-Resolution (map unit)
         :param max_gw: Maximum GW pumping in mm. Any value higher than this will be set to no data
+        :param value_field: Name of the value attribute. Set None to use value_field_pos
+        :param value_field_pos: Value field position (zero indexing)
         :param raster_mask: Raster mask (shapefile) for cropping raster, required only if crop_rasters=True
         :param crop_rasters: Set False to disable raster cropping
         :param ext_mask: Set True to crop by cutline, if shapefile consists of multiple polygons, then this won't
         work
+        :param use_ama_ina: Use AMA/INA shapefile for cropping (Set True for Arizona).
         :param convert_units: If true, converts GW pumping values in acreft to mm
         :param already_created: Set False to re-compute GW pumping rasters
         :return: None
@@ -156,21 +172,26 @@ class HydroML:
             print('Converting SHP to TIF...')
             makedirs([fixed_dir])
             vops.shps2rasters(self.output_shp_dir, self.output_gw_raster_dir, xres=xres, yres=yres, smoothing=0,
-                              gdal_path=self.gdal_path, gridding=False)
+                              value_field=value_field, value_field_pos=value_field_pos, gdal_path=self.gdal_path,
+                              gridding=False)
             if convert_units:
                 max_gw *= xres * yres / (1.233 * 1e+6)
             rops.fix_large_values(self.output_gw_raster_dir, max_threshold=max_gw, outdir=fixed_dir)
-            if crop_rasters:
+            if crop_rasters or use_ama_ina:
                 makedirs([cropped_dir])
+                multi_poly = False
                 if not raster_mask:
                     raster_mask = self.input_state_reproj_file
+                if use_ama_ina:
+                    raster_mask = self.input_ama_ina_reproj_file
+                    multi_poly = True
                 rops.crop_rasters(fixed_dir, outdir=cropped_dir, input_mask_file=raster_mask, ext_mask=ext_mask,
-                                  gdal_path=self.gdal_path)
+                                  gdal_path=self.gdal_path, multi_poly=multi_poly)
             if convert_units:
                 print('Changing GW units from acreft to mm')
                 makedirs([converted_dir])
                 input_dir = fixed_dir
-                if crop_rasters:
+                if crop_rasters or use_ama_ina:
                     input_dir = cropped_dir
                 rops.convert_gw_data(input_dir, converted_dir)
         else:
@@ -469,6 +490,7 @@ def run_gw_az(load_files=True, load_rf_model=False):
     output_shp_dir = file_dir + 'GW_Shapefiles/'
     output_gw_raster_dir = file_dir + 'GW_Rasters/'
     input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
+    input_ama_ina_file = input_dir + 'Boundary/AMA_and_INA.shp'
     input_cdl_file = input_dir + 'CDL/CDL_AZ_2015.tif'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
@@ -487,9 +509,14 @@ def run_gw_az(load_files=True, load_rf_model=False):
                      }
     drop_attrs = ('YEAR',)
     pred_attr = 'GW'
+    fill_attr = 'AF Pumped'
     gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir, input_state_file,
-                 input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file)
-    gw.preprocess_gw_csv(input_gw_csv_dir)
+                 input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
+                 input_ama_ina_file=input_ama_ina_file)
+    gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, already_preprocessed=load_files)
+    gw.reproject_shapefiles(already_reprojected=load_files)
+    gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, use_ama_ina=True,
+                         max_gw=1e+5)
 
 
 # run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
