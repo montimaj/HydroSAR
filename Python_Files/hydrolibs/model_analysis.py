@@ -178,11 +178,11 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     df2.set_index('DT').plot(ax=ax2)
     df2_years = list(df2.DT)
     ax1.axvspan(2010.5, 2018.5, color='#a6bddb', alpha=0.6)
-    min_forecast_yr = min(forecast_years)
+    # min_forecast_yr = min(forecast_years)
     ax1.set_xlim(left=np.min(df1.YEAR) - 0.1, right=np.max(df1.YEAR) + 0.1)
-    ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
-    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
-               labels=['Actual GW', 'Predicted GW', 'Test Years', 'Forecast'])
+    # ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
+    ax1.legend(loc=2, ncol=3, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
+               labels=['Actual GW', 'Predicted GW', 'Test Years'])
     ax1.set_ylabel('Mean GW Pumping (mm)')
     ax1.set_xticks(df1.YEAR)
     ax1.set_xticklabels(df1.YEAR)
