@@ -322,14 +322,15 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
     return regressor
 
 
-def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=None, pred_year=2015, pred_attr='GW',
-                       drop_attrs=(), only_pred=False, calculate_errors=True, ordering=False):
+def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=None, exclude_vars=(), pred_year=2015,
+                       pred_attr='GW', drop_attrs=(), only_pred=False, calculate_errors=True, ordering=False):
     """
     Create prediction raster
     :param rf_model: Pre-built Random Forest Model
     :param out_raster: Output raster
     :param actual_raster_dir: Ground truth raster files required for prediction
     :param column_names: Dataframe column names, these must be df headers
+    :param exclude_vars: Exclude these variables from the model prediction and analysis
     :param pred_year: Prediction year
     :param pred_attr: Prediction attribute name in the dataframe
     :param drop_attrs: Drop these specified attributes (Must be exactly the same as used in rf_regressor module)
@@ -348,14 +349,15 @@ def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=Non
     for raster_file in raster_files:
         sep = raster_file.rfind('_')
         variable, year = raster_file[raster_file.rfind(os.sep) + 1: sep], raster_file[sep + 1: raster_file.rfind('.')]
-        raster_arr, actual_file = rops.read_raster_as_arr(raster_file)
-        raster_shape = raster_arr.shape
-        raster_arr = raster_arr.reshape(raster_shape[0] * raster_shape[1])
-        nan_pos_dict[variable] = np.isnan(raster_arr)
-        if not only_pred:
-            raster_arr[nan_pos_dict[variable]] = 0
-        raster_arr_dict[variable] = raster_arr
-        raster_arr_dict['YEAR'] = [year] * raster_arr.shape[0]
+        if variable not in exclude_vars:
+            raster_arr, actual_file = rops.read_raster_as_arr(raster_file)
+            raster_shape = raster_arr.shape
+            raster_arr = raster_arr.reshape(raster_shape[0] * raster_shape[1])
+            nan_pos_dict[variable] = np.isnan(raster_arr)
+            if not only_pred:
+                raster_arr[nan_pos_dict[variable]] = 0
+            raster_arr_dict[variable] = raster_arr
+            raster_arr_dict['YEAR'] = [year] * raster_arr.shape[0]
 
     input_df = pd.DataFrame(data=raster_arr_dict)
     input_df = input_df.dropna(axis=0)
@@ -401,7 +403,7 @@ def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=Non
 
 
 def predict_rasters(rf_model, actual_raster_dir, out_dir, pred_years, column_names=None, drop_attrs=(), pred_attr='GW',
-                    only_pred=False, exclude_years=(2019, ), ordering=False):
+                    only_pred=False, exclude_vars=(), exclude_years=(2019, ), ordering=False):
     """
     Create prediction rasters from input data
     :param rf_model: Pre-trained Random Forest Model
@@ -412,6 +414,7 @@ def predict_rasters(rf_model, actual_raster_dir, out_dir, pred_years, column_nam
     :param drop_attrs: Drop these specified attributes (Must be exactly the same as used in rf_regressor module)
     :param pred_attr: Prediction Attribute
     :param only_pred: Set true to disable raster creation and for showing only the error metrics
+    :param exclude_vars: Exclude these variables from the model prediction
     :param exclude_years: Exclude these years from error analysis, only the respective predicted rasters are generated
     :param ordering: Set True to order dataframe column names
     :return: None
@@ -424,6 +427,7 @@ def predict_rasters(rf_model, actual_raster_dir, out_dir, pred_years, column_nam
             calculate_errors = False
         mae, rmse, r_squared, normalized_rmse, normalized_mae = create_pred_raster(rf_model, out_raster=out_pred_raster,
                                                                                    actual_raster_dir=actual_raster_dir,
+                                                                                   exclude_vars=exclude_vars,
                                                                                    pred_year=pred_year,
                                                                                    drop_attrs=drop_attrs,
                                                                                    pred_attr=pred_attr,

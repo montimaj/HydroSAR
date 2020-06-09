@@ -288,14 +288,15 @@ class HydroML:
         else:
             print('Land use rasters already created')
 
-    def create_dataframe(self, year_list, column_names=None, ordering=False, load_df=False, exclude_years=(2019, ),
-                         verbose=True):
+    def create_dataframe(self, year_list, column_names=None, ordering=False, load_df=False, exclude_vars=(),
+                         exclude_years=(2019, ), verbose=True):
         """
         Create dataframe from preprocessed files
         :param year_list: List of years for which the dataframe will be created
         :param column_names: Dataframe column names, these must be df headers
         :param ordering: Set True to order dataframe column names
         :param load_df: Set true to load existing dataframe
+        :param exclude_vars: Exclude these variables from the dataframe
         :param exclude_years: List of years to exclude from dataframe
         :param verbose: Get extra information if set to True
         :return: Pandas dataframe object
@@ -318,7 +319,7 @@ class HydroML:
                        pattern_list=pattern_list, rep=True, verbose=verbose)
             print('Creating dataframe...')
             df = rfr.create_dataframe(self.rf_data_dir, out_df=df_file, column_names=column_names, make_year_col=True,
-                                      exclude_years=exclude_years, ordering=ordering)
+                                      exclude_vars=exclude_vars, exclude_years=exclude_years, ordering=ordering)
             return df
 
     def tune_parameters(self, df, pred_attr, drop_attrs=()):
@@ -383,7 +384,7 @@ class HydroML:
         return rf_model
 
     def get_predictions(self, rf_model, pred_years, column_names=None, final_mask=None, ordering=False, pred_attr='GW',
-                        only_pred=False, exclude_years=(2019,), drop_attrs=(), crop_rasters=False):
+                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=(), crop_rasters=False):
         """
         Get prediction results and/or rasters
         :param rf_model: Fitted RandomForestRegressor model
@@ -394,6 +395,7 @@ class HydroML:
         :param ordering: Set True to order dataframe column names
         :param pred_attr: Prediction attribute name in the dataframe
         :param only_pred: Set True to disable prediction raster generation
+        :param exclude_vars: Exclude these variables from the model prediction analysis
         :param exclude_years: List of years to exclude from dataframe
         :param drop_attrs: Drop these specified attributes
         :param crop_rasters: Set True to crop actual and predicted rasters
@@ -405,7 +407,8 @@ class HydroML:
         makedirs([pred_out_dir])
         rfr.predict_rasters(rf_model, pred_years=pred_years, drop_attrs=drop_attrs, out_dir=pred_out_dir,
                             actual_raster_dir=self.rf_data_dir, pred_attr=pred_attr, only_pred=only_pred,
-                            exclude_years=exclude_years, column_names=column_names, ordering=ordering)
+                            exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
+                            ordering=ordering)
         if crop_rasters:
             crop_dir = make_proper_dir_name(pred_out_dir + 'Cropped_Rasters')
             makedirs([crop_dir])
@@ -508,28 +511,31 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'URBAN')
+    drop_attrs = ('YEAR',)
+    exclude_vars = ()
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
                      input_ama_ina_file=input_ama_ina_file)
-        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, already_preprocessed=load_files)
-        gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, use_ama_ina=True,
+        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, already_preprocessed=True)
+        gw.reproject_shapefiles(already_reprojected=True)
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=500, yres=500, use_ama_ina=True,
                              max_gw=1e+5)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.mask_rasters(already_masked=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_years=(), load_df=load_files)
+        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(),
+                                 load_df=load_files)
         rf_model = gw.build_model(df, test_year=range(2011, 2020), drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                  load_model=load_rf_model, max_features=4, plot_graphs=False)
+                                  load_model=load_rf_model, max_features=5, plot_graphs=False)
         pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020), drop_attrs=drop_attrs,
-                                         pred_attr=pred_attr, exclude_years=(), only_pred=False)
+                                         pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
+                                         only_pred=False)
     ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
 
 
 # run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=False, load_rf_model=False)
