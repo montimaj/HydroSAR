@@ -4,6 +4,7 @@
 import pandas as pd
 from Python_Files.hydrolibs import rasterops as rops
 from Python_Files.hydrolibs import vectorops as vops
+from Python_Files.hydrolibs import process_ssebop as pssebop
 from Python_Files.hydrolibs.sysops import makedirs, make_proper_dir_name, copy_files
 from Python_Files.hydrolibs import random_forest_regressor as rfr
 from Python_Files.hydrolibs import model_analysis as ma
@@ -13,7 +14,8 @@ from glob import glob
 class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None, input_ama_ina_file=None):
+                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None, input_ama_ina_file=None,
+                 ssebop_link=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -28,6 +30,7 @@ class HydroML:
         Linux or Mac and 'C:/OSGeo4W64/' on Windows
         :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
         :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona. Set None for Kansas.
+        :param ssebop_link: SSEBop data download link. SSEBop data are not downloaded if its set to None.
         """
 
         self.input_dir = make_proper_dir_name(input_dir)
@@ -41,6 +44,7 @@ class HydroML:
         self.input_ama_ina_file = input_ama_ina_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
+        self.ssebop_link = ssebop_link
         self.input_gw_boundary_reproj_file = None
         self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
@@ -51,7 +55,31 @@ class HydroML:
         self.raster_mask_dir = None
         self.land_use_dir_list = None
         self.rf_data_dir = None
+        self.ssebop_zip_dir = self.input_dir + 'SSEBop_Data/'
+        self.ssebop_out_dir = self.ssebop_zip_dir + 'SSEBop_Files/'
+        self.ssebop_reproj_dir = self.ssebop_out_dir + 'SSEBop_Reproj/'
+        self.ssebop_mask_dir = self.ssebop_reproj_dir + 'SSEBop_Masked/'
+        self.ssebop_year_list = None
+        self.ssebop_month_list = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
+
+    def download_ssebop_data(self, year_list, month_list, already_downloaded=False):
+        """
+        Download, extract, and preprocess SSEBop data
+        :param year_list: List of years %yyyy format
+        :param month_list: List of months in %m format
+        :param already_downloaded: Set True to disable downloading
+        :return: None
+        """
+
+        self.ssebop_year_list = year_list
+        self.ssebop_month_list = month_list
+        if not already_downloaded:
+            makedirs([self.ssebop_zip_dir, self.ssebop_out_dir])
+            pssebop.download_ssebop_data(self.ssebop_link, year_list, month_list, self.ssebop_zip_dir)
+            pssebop.extract_data(self.ssebop_zip_dir, self.ssebop_out_dir)
+        else:
+            print('SSEBop data already downloaded and extracted...')
 
     def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr='AMA',
                           filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
@@ -241,6 +269,10 @@ class HydroML:
             makedirs([self.raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
+            if self.ssebop_link:
+                makedirs([self.ssebop_reproj_dir])
+                rops.reproject_rasters(self.ssebop_out_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
+                                       pattern=pattern, gdal_path=self.gdal_path)
         else:
             print('All rasters already reprojected')
 
@@ -258,6 +290,12 @@ class HydroML:
             makedirs([self.raster_mask_dir])
             rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
                               pattern=pattern)
+            if self.ssebop_link:
+                makedirs([self.ssebop_mask_dir])
+                rops.mask_rasters(self.ssebop_reproj_dir, ref_raster=self.ref_raster, outdir=self.ssebop_mask_dir,
+                                  pattern=pattern)
+                pssebop.generate_cummulative_ssebop(self.ssebop_mask_dir, year_list=self.ssebop_year_list,
+                                                    month_list=self.ssebop_month_list, out_dir=self.raster_mask_dir)
         else:
             print('All rasters already masked')
 
@@ -502,6 +540,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     gw_dir = file_dir + 'RF_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
+    ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
+                  'downloads/'
+    ssebop_year_list = range(2002, 2020)
+    ssebop_month_list = range(4, 10)
     az_class_dict = {(0, 59.5): 1,
                      (66.5, 77.5): 1,
                      (203.5, 255): 1,
@@ -512,16 +554,17 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      (130.5, 195.5): 0
                      }
     drop_attrs = ('YEAR',)
-    exclude_vars = ()
+    exclude_vars = ('ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
-                     input_ama_ina_file=input_ama_ina_file)
+                     input_ama_ina_file=input_ama_ina_file, ssebop_link=ssebop_link)
+        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, already_preprocessed=True)
         gw.reproject_shapefiles(already_reprojected=True)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=500, yres=500, use_ama_ina=True,
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, use_ama_ina=True,
                              max_gw=1e+5)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
@@ -529,7 +572,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(),
                                  load_df=load_files)
-        rf_model = gw.build_model(df, test_year=range(2011, 2020), drop_attrs=drop_attrs, pred_attr=pred_attr,
+        rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=5, plot_graphs=False)
         pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020), drop_attrs=drop_attrs,
                                          pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
@@ -538,4 +581,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=False, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
