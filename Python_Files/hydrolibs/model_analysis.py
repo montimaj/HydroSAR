@@ -195,7 +195,7 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     ax2.xaxis.set_major_locator(mdates.YearLocator())
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
     datemin = np.datetime64(df2_years[0], 'Y')
-    datemax = np.datetime64(df2_years[-1], 'Y') + np.timedelta64(1, 'Y')
+    datemax = np.datetime64(df2_years[-2], 'Y') + np.timedelta64(1, 'Y')
     ax2.set_xlim(datemin, datemax)
     ax2.format_xdata = mdates.DateFormatter('%Y')
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)

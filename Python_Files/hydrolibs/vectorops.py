@@ -134,7 +134,7 @@ def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_fi
     :param input_gw_csv_file: Input GW csv file
     :param out_gw_shp_file: Output GWSI shapefile having GW withdrawal data
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
-    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
     :param filter_attr_value: Value for filter_attr
     :return: None
     """
@@ -152,7 +152,8 @@ def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_fi
         movement_type = kwargs['movement_type']
         water_type = kwargs['water_type']
         shp_well_id = kwargs['shp_well_id']
-    well_reg_gdf = well_reg_gdf[well_reg_gdf[filter_attr] != filter_attr_value]
+    if filter_attr:
+        well_reg_gdf = well_reg_gdf[well_reg_gdf[filter_attr] != filter_attr_value]
     for csv_id in set(gw_df[csv_well_id]):
         sub_gw_df = gw_df[(gw_df[csv_well_id] == csv_id) & (gw_df[csv_mov_id] == movement_type) &
                           (gw_df[csv_water_id] == water_type)]
@@ -182,7 +183,7 @@ def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_g
     :param input_gw_csv_dir: Input GW csv directory
     :param out_gw_shp_dir: Output Well Registry shapefile directory having GW withdrawal data
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
-    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
     :param filter_attr_value: Value for filter_attr
     :return: None
     """
@@ -208,7 +209,7 @@ def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_
     :param input_gw_csv_file: Input GW csv file
     :param out_gw_shp_dir: Output GWSI shapefile directory having GW withdrawal data
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
-    :param filter_attr: Remove specific wells based on this attribute
+    :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
     :param filter_attr_value: Value for filter_attr
     :return: None
     """

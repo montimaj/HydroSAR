@@ -15,7 +15,7 @@ class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
                  input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None, input_ama_ina_file=None,
-                 ssebop_link=None):
+                 input_watershed_file=None, ssebop_link=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -30,6 +30,7 @@ class HydroML:
         Linux or Mac and 'C:/OSGeo4W64/' on Windows
         :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
         :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona. Set None for Kansas.
+        :param input_watershed_file: The file path to the Arizona surface watershed shapefile. Set None for Kansas.
         :param ssebop_link: SSEBop data download link. SSEBop data are not downloaded if its set to None.
         """
 
@@ -42,23 +43,27 @@ class HydroML:
         self.gdal_path = make_proper_dir_name(gdal_path)
         self.input_gw_boundary_file = input_gw_boundary_file
         self.input_ama_ina_file = input_ama_ina_file
+        self.input_watershed_file = input_watershed_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.ssebop_link = ssebop_link
         self.input_gw_boundary_reproj_file = None
         self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
+        self.input_watershed_reproj_file = None
         self.final_gw_dir = None
+        self.actual_gw_dir = None
         self.ref_raster = None
         self.raster_reproj_dir = None
         self.reclass_reproj_file = None
         self.raster_mask_dir = None
         self.land_use_dir_list = None
         self.rf_data_dir = None
+        self.pred_data_dir = None
+        self.lu_mask_dir = None
         self.ssebop_zip_dir = self.input_dir + 'SSEBop_Data/'
         self.ssebop_out_dir = self.ssebop_zip_dir + 'SSEBop_Files/'
         self.ssebop_reproj_dir = self.ssebop_out_dir + 'SSEBop_Reproj/'
-        self.ssebop_mask_dir = self.ssebop_reproj_dir + 'SSEBop_Masked/'
         self.ssebop_year_list = None
         self.ssebop_month_list = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
@@ -81,7 +86,7 @@ class HydroML:
         else:
             print('SSEBop data already downloaded and extracted...')
 
-    def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr='AMA',
+    def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr=None,
                           filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
         """
         Preprocess the well registry file to add GW pumping from each CSV file. That is, add an attribute present in the
@@ -91,8 +96,8 @@ class HydroML:
         csv_mov_id='Movement Type', csv_water_id='Water Type', movement_type='WITHDRAWAL', water_type='GROUNDWATER', and
         shp_well_id='REGISTRY_I' by default. For changing, pass appropriate kwargs.
         :param input_gw_csv_dir: Input GW csv directory
-        :param fill_attr: Attribute present in the CSV file to add to Well Registry
-        :param filter_attr: Remove specific wells based on this attribute
+        :param fill_attr: Attribute present in the CSV file to add to Well Registry.
+        :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
         :param filter_attr_value: Value for filter_attr
         :param already_preprocessed: Set True to disable preprocessing
         :return: None
@@ -130,10 +135,13 @@ class HydroML:
 
         gw_boundary_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_boundary/reproj')
         gw_ama_ina_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_ama_ina/reproj')
+        watershed_reproj_dir = make_proper_dir_name(self.file_dir + 'watershed/reproj')
         state_reproj_dir = make_proper_dir_name(self.file_dir + 'state/reproj')
         self.input_gw_boundary_reproj_file = gw_boundary_reproj_dir + 'input_boundary_reproj.shp'
         if self.input_ama_ina_file:
             self.input_ama_ina_reproj_file = gw_ama_ina_reproj_dir + 'input_ama_ina_reproj.shp'
+        if self.input_watershed_file:
+            self.input_watershed_reproj_file = watershed_reproj_dir + 'input_watershed_reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
             print('Reprojecting Boundary/State/AMA_INA shapefiles...')
@@ -143,6 +151,9 @@ class HydroML:
                                   ref_file=ref_shp, raster=False)
             if self.input_ama_ina_file:
                 vops.reproject_vector(self.input_ama_ina_file, outfile_path=self.input_ama_ina_reproj_file,
+                                      ref_file=ref_shp, raster=False)
+            if self.input_watershed_file:
+                vops.reproject_vector(self.input_watershed_file, outfile_path=self.input_watershed_reproj_file,
                                       ref_file=ref_shp, raster=False)
             vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
                                   raster=False)
@@ -173,9 +184,34 @@ class HydroML:
             print('GW Shapefiles already clipped')
         self.output_shp_dir = clip_shp_dir
 
+    def crop_gw_rasters(self, raster_mask=None, ext_mask=True, use_ama_ina=False, already_cropped=False):
+        """
+        Crop GW rasters based on a mask, should be called after GW rasters have been created.
+        :param raster_mask: Raster mask (shapefile) for cropping raster, required only if crop_rasters=True
+        :param ext_mask: Set True to crop by cutline, if shapefile consists of multiple polygons, then this won't
+        work and appropriate AMA/INA should be set
+        :param use_ama_ina: Use AMA/INA shapefile for cropping (Set True for Arizona).
+        :param already_cropped: Set True to disable cropping
+        :return: None
+        """
+
+        cropped_dir = make_proper_dir_name(self.output_gw_raster_dir + 'Cropped')
+        if not already_cropped:
+            makedirs([cropped_dir])
+            multi_poly = False
+            if not raster_mask:
+                raster_mask = self.input_state_reproj_file
+            if use_ama_ina:
+                raster_mask = self.input_ama_ina_reproj_file
+                multi_poly = True
+            rops.crop_rasters(self.output_gw_raster_dir, outdir=cropped_dir, input_mask_file=raster_mask,
+                              ext_mask=ext_mask, gdal_path=self.gdal_path, multi_poly=multi_poly)
+        else:
+            print('GW rasters already cropped')
+        self.final_gw_dir = cropped_dir
+
     def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
-                          raster_mask=None, crop_rasters=False, ext_mask=True, use_ama_ina=False, convert_units=True,
-                          already_created=True):
+                          convert_units=True, already_created=True):
         """
         Create GW rasters from shapefiles
         :param xres: X-Resolution (map unit)
@@ -183,18 +219,12 @@ class HydroML:
         :param max_gw: Maximum GW pumping in mm. Any value higher than this will be set to no data
         :param value_field: Name of the value attribute. Set None to use value_field_pos
         :param value_field_pos: Value field position (zero indexing)
-        :param raster_mask: Raster mask (shapefile) for cropping raster, required only if crop_rasters=True
-        :param crop_rasters: Set False to disable raster cropping
-        :param ext_mask: Set True to crop by cutline, if shapefile consists of multiple polygons, then this won't
-        work
-        :param use_ama_ina: Use AMA/INA shapefile for cropping (Set True for Arizona).
         :param convert_units: If true, converts GW pumping values in acreft to mm
         :param already_created: Set False to re-compute GW pumping rasters
         :return: None
         """
 
         fixed_dir = make_proper_dir_name(self.output_gw_raster_dir + 'Fixed')
-        cropped_dir = make_proper_dir_name(self.output_gw_raster_dir + 'Cropped')
         converted_dir = make_proper_dir_name(self.output_gw_raster_dir + 'Converted')
         if not already_created:
             print('Converting SHP to TIF...')
@@ -205,31 +235,17 @@ class HydroML:
             if convert_units:
                 max_gw *= xres * yres / (1.233 * 1e+6)
             rops.fix_large_values(self.output_gw_raster_dir, max_threshold=max_gw, outdir=fixed_dir)
-            if crop_rasters or use_ama_ina:
-                makedirs([cropped_dir])
-                multi_poly = False
-                if not raster_mask:
-                    raster_mask = self.input_state_reproj_file
-                if use_ama_ina:
-                    raster_mask = self.input_ama_ina_reproj_file
-                    multi_poly = True
-                rops.crop_rasters(fixed_dir, outdir=cropped_dir, input_mask_file=raster_mask, ext_mask=ext_mask,
-                                  gdal_path=self.gdal_path, multi_poly=multi_poly)
             if convert_units:
                 print('Changing GW units from acreft to mm')
                 makedirs([converted_dir])
-                input_dir = fixed_dir
-                if crop_rasters or use_ama_ina:
-                    input_dir = cropped_dir
-                rops.convert_gw_data(input_dir, converted_dir)
+                rops.convert_gw_data(fixed_dir, converted_dir)
         else:
             print('GW  pumping rasters already created')
         if convert_units:
             self.final_gw_dir = converted_dir
-        elif crop_rasters:
-            self.final_gw_dir = cropped_dir
         else:
             self.final_gw_dir = fixed_dir
+        self.actual_gw_dir = self.final_gw_dir
 
     def reclassify_cdl(self, reclass_dict, pattern='*.tif', already_reclassified=False):
         """
@@ -243,7 +259,7 @@ class HydroML:
 
         reclass_dir = make_proper_dir_name(self.file_dir + 'Reclass')
         self.reclass_reproj_file = reclass_dir + 'reclass_reproj.tif'
-        self.ref_raster = glob(self.final_gw_dir + pattern)[0]
+        self.ref_raster = glob(self.actual_gw_dir + pattern)[0]
         if not already_reclassified:
             print('Reclassifying CDL 2015 data...')
             makedirs([reclass_dir])
@@ -273,31 +289,10 @@ class HydroML:
                 makedirs([self.ssebop_reproj_dir])
                 rops.reproject_rasters(self.ssebop_out_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
+                pssebop.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.ssebop_year_list,
+                                                    month_list=self.ssebop_month_list, out_dir=self.raster_reproj_dir)
         else:
             print('All rasters already reprojected')
-
-    def mask_rasters(self, pattern='*.tif', already_masked=False):
-        """
-        Mask rasters based on reference GW raster
-        :param pattern: File pattern to look for
-        :param already_masked: Set True to disable raster masking
-        :return: None
-        """
-
-        self.raster_mask_dir = make_proper_dir_name(self.file_dir + 'Masked_Rasters')
-        if not already_masked:
-            print('Masking rasters...')
-            makedirs([self.raster_mask_dir])
-            rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
-                              pattern=pattern)
-            if self.ssebop_link:
-                makedirs([self.ssebop_mask_dir])
-                rops.mask_rasters(self.ssebop_reproj_dir, ref_raster=self.ref_raster, outdir=self.ssebop_mask_dir,
-                                  pattern=pattern)
-                pssebop.generate_cummulative_ssebop(self.ssebop_mask_dir, year_list=self.ssebop_year_list,
-                                                    month_list=self.ssebop_month_list, out_dir=self.raster_mask_dir)
-        else:
-            print('All rasters already masked')
 
     def create_land_use_rasters(self, class_values=(1, 2, 3), class_labels=('AGRI', 'SW', 'URBAN'),
                                 smoothing_factors=(3, 5, 3), already_created=False):
@@ -315,10 +310,11 @@ class HydroML:
             for idx, (class_value, class_label) in enumerate(zip(class_values, class_labels)):
                 print('Extracting land use raster for', class_label, '...')
                 raster_dir = self.land_use_dir_list[idx]
-                makedirs([raster_dir])
-                raster_file = raster_dir + class_label + '.tif'
+                intermediate_raster_dir = make_proper_dir_name(raster_dir + 'Intermediate')
+                makedirs([intermediate_raster_dir])
+                raster_file = intermediate_raster_dir + class_label + '_actual.tif'
                 rops.apply_raster_filter2(self.reclass_reproj_file, outfile_path=raster_file, val=class_value)
-                raster_masked = raster_dir + class_label + '_masked.tif'
+                raster_masked = intermediate_raster_dir + class_label + '_masked.tif'
                 rops.filter_nans(raster_file, self.ref_raster, outfile_path=raster_masked)
                 raster_flt = raster_dir + class_label + '_flt.tif'
                 rops.apply_gaussian_filter(raster_masked, ref_file=self.ref_raster, outfile_path=raster_flt,
@@ -326,8 +322,37 @@ class HydroML:
         else:
             print('Land use rasters already created')
 
+    def create_water_stress_index_rasters(self):
+        """
+        Create water stress index based on P, ET, and landuse
+        :return: None
+        """
+
+        pass
+
+    def mask_rasters(self, pattern='*.tif', already_masked=False):
+        """
+        Mask rasters based on reference GW raster
+        :param pattern: File pattern to look for
+        :param already_masked: Set True to disable raster masking
+        :return: None
+        """
+
+        self.ref_raster = glob(self.final_gw_dir + pattern)[0]
+        self.raster_mask_dir = make_proper_dir_name(self.file_dir + 'Masked_Rasters')
+        self.lu_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_LU')
+        if not already_masked:
+            print('Masking rasters...')
+            makedirs([self.raster_mask_dir, self.lu_mask_dir])
+            rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
+                              pattern=pattern)
+            for lu_dir in self.land_use_dir_list:
+                rops.mask_rasters(lu_dir, ref_raster=self.ref_raster, outdir=self.lu_mask_dir, pattern=pattern)
+        else:
+            print('All rasters already masked')
+
     def create_dataframe(self, year_list, column_names=None, ordering=False, load_df=False, exclude_vars=(),
-                         exclude_years=(2019, ), verbose=True):
+                         exclude_years=(2019, ), pattern='*.tif', verbose=True):
         """
         Create dataframe from preprocessed files
         :param year_list: List of years for which the dataframe will be created
@@ -336,24 +361,33 @@ class HydroML:
         :param load_df: Set true to load existing dataframe
         :param exclude_vars: Exclude these variables from the dataframe
         :param exclude_years: List of years to exclude from dataframe
+        :param pattern: File pattern
         :param verbose: Get extra information if set to True
         :return: Pandas dataframe object
         """
 
         self.rf_data_dir = make_proper_dir_name(self.file_dir + 'RF_Data')
+        self.pred_data_dir = make_proper_dir_name(self.file_dir + 'Pred_Data')
         df_file = self.output_dir + 'raster_df.csv'
         if load_df:
             print('Getting dataframe...')
             return pd.read_csv(df_file)
         else:
             print('Copying files...')
-            makedirs([self.rf_data_dir])
+            makedirs([self.rf_data_dir, self.pred_data_dir])
             input_dir_list = [self.final_gw_dir] + [self.raster_mask_dir]
-            pattern_list = ['*.tif'] * len(input_dir_list)
+            pattern_list = [pattern] * len(input_dir_list)
             copy_files(input_dir_list, target_dir=self.rf_data_dir, year_list=year_list, pattern_list=pattern_list,
                        verbose=verbose)
-            pattern_list = ['*_flt.tif'] * len(self.land_use_dir_list)
-            copy_files(self.land_use_dir_list, target_dir=self.rf_data_dir, year_list=year_list,
+            copy_files([self.lu_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
+                       pattern_list=[pattern], rep=True, verbose=verbose)
+
+            input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
+            pattern_list = [pattern] * len(input_dir_list)
+            copy_files(input_dir_list, target_dir=self.pred_data_dir, year_list=year_list, pattern_list=pattern_list,
+                       verbose=verbose)
+            pattern_list = [pattern] * len(self.land_use_dir_list)
+            copy_files(self.land_use_dir_list, target_dir=self.pred_data_dir, year_list=year_list,
                        pattern_list=pattern_list, rep=True, verbose=verbose)
             print('Creating dataframe...')
             df = rfr.create_dataframe(self.rf_data_dir, out_df=df_file, column_names=column_names, make_year_col=True,
@@ -504,8 +538,8 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
         gw.create_gw_rasters(already_created=load_files)
         gw.reclassify_cdl(ks_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        gw.mask_rasters(already_masked=load_files)
         gw.create_land_use_rasters(already_created=load_files)
+        gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), load_df=load_files)
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=5, plot_graphs=False)
@@ -557,24 +591,26 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     exclude_vars = ('ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
+    filter_attr = None
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
                      input_ama_ina_file=input_ama_ina_file, ssebop_link=ssebop_link)
-        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=load_files)
-        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, already_preprocessed=True)
-        gw.reproject_shapefiles(already_reprojected=True)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, use_ama_ina=True,
-                             max_gw=1e+5)
+        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=True)
+        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
+                             already_preprocessed=load_files)
+        gw.reproject_shapefiles(already_reprojected=load_files)
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=1e+5)
+        gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        gw.mask_rasters(already_masked=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(),
-                                 load_df=load_files)
+        gw.mask_rasters(already_masked=load_files)
+        df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
+                                 load_df=False)
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=5, plot_graphs=False)
-        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020), drop_attrs=drop_attrs,
+        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
                                          pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
                                          only_pred=False)
     ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
