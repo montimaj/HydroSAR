@@ -648,23 +648,6 @@ def scale_raster_data(input_raster_dir, outdir, scaling_factor=10, pattern='*.ti
         write_raster(raster_arr, raster_ref, transform=raster_ref.transform, outfile_path=out_raster)
 
 
-def crop_multiple_rasters(input_raster_dir, outdir, input_shp_file, pattern='*.tif', verbose=True):
-    """
-    Crop multiple rasters using shape file extent
-    :param input_raster_dir: Input raster directory
-    :param outdir: Output directory
-    :param input_shp_file: Input shape file
-    :param pattern: Raster file name pattern
-    :param verbose: Set True to print system call info
-    :return: None
-    """
-
-    for raster_file in glob(input_raster_dir + pattern):
-        out_raster = outdir + raster_file[raster_file.rfind(os.sep) + 1:]
-        crop_raster(raster_file, input_mask_path=input_shp_file, ext_mask=False, outfile_path=out_raster, 
-                    verbose=verbose)
-
-
 def fill_mean_value(input_raster_dir, outdir, pattern='GRACE*.tif'):
     """
     Replace all values with the mean value of the raster
@@ -756,3 +739,88 @@ def fix_large_values(input_raster_dir, outdir, max_threshold=1e+5, pattern='GW*.
         raster_arr[np.isnan(raster_arr)] = NO_DATA_VALUE
         raster_arr[raster_arr >= max_threshold] = NO_DATA_VALUE
         write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=out_raster)
+
+
+def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, output_dir):
+    """
+    Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
+    :param watershed_shp_file: Watershed shape file consisting of watershed polygons
+    :param raster_file_list: List of raster file paths ordered by P, ET (or SSEBop), AGRI, and URBAN
+    :param output_dir: Output directory to store water stress rasters
+    :return: None
+    """
+
+    precip_raster = raster_file_list[0]
+    et_raster = raster_file_list[1]
+    agri_raster = raster_file_list[2]
+    urban_raster = raster_file_list[3]
+    year = precip_raster[precip_raster.rfind('_') + 1: precip_raster.rfind('.')]
+    print('Computing Water Stress Index for', year, '...')
+    watershed_shp = gpd.read_file(watershed_shp_file)
+    precip_arr, precip_file = read_raster_as_arr(precip_raster)
+    et_file = read_raster_as_arr(et_raster)[1]
+    agri_file = read_raster_as_arr(agri_raster)[1]
+    urban_file = read_raster_as_arr(urban_raster)[1]
+    ws_arr = np.full_like(precip_arr, fill_value=np.nan)
+    ws_et_arr = np.full_like(precip_arr, fill_value=np.nan)
+    for poly in watershed_shp['geometry']:
+        p_crop_arr = mask(precip_file, [poly])[0]
+        et_crop_arr = mask(et_file, [poly])[0]
+        agri_crop_arr = mask(agri_file, [poly])[0]
+        urban_crop_arr = mask(urban_file, [poly])[0]
+        agri_count = len(list(agri_crop_arr[agri_crop_arr > 0]))
+        urban_count = len(list(urban_crop_arr[urban_crop_arr > 0]))
+        p_avg = np.nanmean(p_crop_arr)
+        et_avg = np.nanmean(et_crop_arr)
+        lu = agri_count + urban_count / 2
+        ws = np.abs((p_avg - lu) / (p_avg + lu))
+        p_et = np.abs(p_avg - et_avg)
+        ws_et = np.abs((p_et - lu) / (p_et + lu))
+        watershed_shp.loc[watershed_shp['geometry'] == poly, 'WS'] = ws
+        watershed_shp.loc[watershed_shp['geometry'] == poly, 'WS_ET'] = ws_et
+    for idx, value in np.ndenumerate(ws_arr):
+        gx, gy = precip_file.xy(idx[0], idx[1])
+        gp = Point(gx, gy)
+        for poly in watershed_shp['geometry']:
+            if poly.contains(gp):
+                curr_watershed = watershed_shp[watershed_shp['geometry'] == poly]
+                ws_arr[idx] = list(curr_watershed['WS'])[0]
+                ws_et_arr[idx] = list(curr_watershed['WS_ET'])[0]
+    ws_arr[~np.isnan(ws_arr)] /= np.nanmax(ws_arr)
+    ws_et_arr[~np.isnan(ws_et_arr)] /= np.nanmax(ws_et_arr)
+    ws_arr[np.isnan(ws_arr)] = precip_file.nodata
+    ws_et_arr[np.isnan(ws_et_arr)] = precip_file.nodata
+    out_ws_path = output_dir + 'WS_' + year + '.tif'
+    out_ws_et_path = output_dir + 'WS_ET_' + year + '.tif'
+    write_raster(ws_arr, precip_file, transform=precip_file.transform, outfile_path=out_ws_path)
+    write_raster(ws_et_arr, precip_file, transform=precip_file.transform, outfile_path=out_ws_et_path)
+
+
+def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir, rep_landuse=True,
+                                       pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif')):
+    """
+    Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
+    :param watershed_shp_file: Watershed shape file consisting of watershed polygons
+    :param input_raster_dir_list: Input list of raster directories containing precipitation, evapotranspiration,
+    agriculture, and urban rasters
+    :param output_dir: Output directory to store water stress rasters
+    :param rep_landuse: Set True to replicate landuse raster file paths (should be True if same AGRI and URBAN are used
+    for all years)
+    :param pattern_list: Raster pattern list ordered by P, ET, AGRI, and URBAN
+    :return: None
+    """
+
+    print('Computing water stress index rasters...')
+    precip_file_list = sorted(glob(input_raster_dir_list[0] + pattern_list[0]))
+    et_file_list = sorted(glob(input_raster_dir_list[1] + pattern_list[1]))
+    agri_file_list = sorted(glob(input_raster_dir_list[2] + pattern_list[2]))
+    urban_file_list = sorted(glob(input_raster_dir_list[3] + pattern_list[3]))
+    if rep_landuse:
+        len_precip_list = len(precip_file_list)
+        agri_file_list *= len_precip_list
+        urban_file_list *= len_precip_list
+    num_cores = multiprocessing.cpu_count()
+    raster_file_lists = zip(precip_file_list, et_file_list, agri_file_list, urban_file_list)
+    Parallel(n_jobs=num_cores)(delayed(compute_water_stress_index_raster)(watershed_shp_file, raster_file_list,
+                                                                          output_dir)
+                               for raster_file_list in raster_file_lists)

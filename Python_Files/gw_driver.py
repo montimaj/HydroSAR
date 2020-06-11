@@ -144,15 +144,17 @@ class HydroML:
             self.input_watershed_reproj_file = watershed_reproj_dir + 'input_watershed_reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
-            print('Reprojecting Boundary/State/AMA_INA shapefiles...')
-            makedirs([gw_boundary_reproj_dir, gw_ama_ina_reproj_dir, state_reproj_dir])
+            print('Reprojecting Boundary/State/AMA_INA/Watershed shapefiles...')
+            makedirs([gw_boundary_reproj_dir, state_reproj_dir])
             ref_shp = glob(self.output_shp_dir + '*.shp')[0]
             vops.reproject_vector(self.input_gw_boundary_file, outfile_path=self.input_gw_boundary_reproj_file,
                                   ref_file=ref_shp, raster=False)
             if self.input_ama_ina_file:
+                makedirs([gw_ama_ina_reproj_dir])
                 vops.reproject_vector(self.input_ama_ina_file, outfile_path=self.input_ama_ina_reproj_file,
                                       ref_file=ref_shp, raster=False)
             if self.input_watershed_file:
+                makedirs([watershed_reproj_dir])
                 vops.reproject_vector(self.input_watershed_file, outfile_path=self.input_watershed_reproj_file,
                                       ref_file=ref_shp, raster=False)
             vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
@@ -322,13 +324,25 @@ class HydroML:
         else:
             print('Land use rasters already created')
 
-    def create_water_stress_index_rasters(self):
+    def create_water_stress_index_rasters(self, pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
+                                          rep_landuse=True, already_created=False):
         """
-        Create water stress index based on P, ET, and landuse
+        Create water stress index rasters based on P, ET, and landuse
+        :param pattern_list: Raster pattern list ordered by P, ET (or SSEBop), AGRI, and URBAN
+        :param rep_landuse: Set True to replicate landuse raster file paths (should be True if same AGRI and URBAN are
+        used for all years)
+        :param already_created: Set True to disable water stress raster creation
         :return: None
         """
 
-        pass
+        if not already_created:
+            input_raster_dir_list = [self.raster_reproj_dir] * 2 + [self.land_use_dir_list[0],
+                                                                    self.land_use_dir_list[2]]
+            rops.compute_water_stress_index_rasters(self.input_watershed_reproj_file, pattern_list=pattern_list,
+                                                    input_raster_dir_list=input_raster_dir_list,
+                                                    rep_landuse=rep_landuse, output_dir=self.raster_reproj_dir)
+        else:
+            print('Water stress rasters already created')
 
     def mask_rasters(self, pattern='*.tif', already_masked=False):
         """
@@ -455,22 +469,19 @@ class HydroML:
                                     load_model=load_model, test_size=test_size)
         return rf_model
 
-    def get_predictions(self, rf_model, pred_years, column_names=None, final_mask=None, ordering=False, pred_attr='GW',
-                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=(), crop_rasters=False):
+    def get_predictions(self, rf_model, pred_years, column_names=None, ordering=False, pred_attr='GW',
+                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=()):
         """
         Get prediction results and/or rasters
         :param rf_model: Fitted RandomForestRegressor model
         :param pred_years: Predict for these years
         :param column_names: Dataframe column names, these must be df headers
-        :param final_mask: Raster mask required to properly clip the actual and predicted rasters, required only if
-        crop_rasters=True
         :param ordering: Set True to order dataframe column names
         :param pred_attr: Prediction attribute name in the dataframe
         :param only_pred: Set True to disable prediction raster generation
         :param exclude_vars: Exclude these variables from the model prediction analysis
         :param exclude_years: List of years to exclude from dataframe
         :param drop_attrs: Drop these specified attributes
-        :param crop_rasters: Set True to crop actual and predicted rasters
         :return: Predicted raster directory path
         """
 
@@ -481,16 +492,6 @@ class HydroML:
                             actual_raster_dir=self.rf_data_dir, pred_attr=pred_attr, only_pred=only_pred,
                             exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
                             ordering=ordering)
-        if crop_rasters:
-            crop_dir = make_proper_dir_name(pred_out_dir + 'Cropped_Rasters')
-            makedirs([crop_dir])
-            pattern = pred_attr + '*.tif'
-            if not final_mask:
-                final_mask = self.input_state_reproj_file
-            rops.crop_multiple_rasters(self.rf_data_dir, outdir=crop_dir, input_shp_file=final_mask, pattern=pattern)
-            pattern = 'pred*.tif'
-            rops.crop_multiple_rasters(pred_out_dir, outdir=crop_dir, input_shp_file=final_mask, pattern=pattern)
-            pred_out_dir = crop_dir
         return pred_out_dir
 
 
@@ -568,6 +569,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
     input_ama_ina_file = input_dir + 'Boundary/AMA_and_INA.shp'
     input_cdl_file = input_dir + 'CDL/CDL_AZ_2015.tif'
+    input_watershed_file = input_dir + 'Watersheds/Surface_Watershed.shp'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
     gdal_path = 'C:/OSGeo4W64/'
@@ -595,7 +597,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
-                     input_ama_ina_file=input_ama_ina_file, ssebop_link=ssebop_link)
+                     input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
+                     ssebop_link=ssebop_link)
         gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=True)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
                              already_preprocessed=load_files)
@@ -605,15 +608,16 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
-                                 load_df=False)
-        rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                  load_model=load_rf_model, max_features=5, plot_graphs=False)
-        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
-                                         pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
-                                         only_pred=False)
-    ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
+        gw.create_water_stress_index_rasters(already_created=False)
+        # gw.mask_rasters(already_masked=False)
+        # df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
+        #                          load_df=False)
+        # rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
+        #                           load_model=load_rf_model, max_features=5, plot_graphs=False)
+        # pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
+        #                                  pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
+        #                                  only_pred=False)
+    # ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
 
 
 # run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
