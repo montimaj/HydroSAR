@@ -598,7 +598,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR',)
+    drop_attrs = ('YEAR', 'WS_PT', 'WS_PT_ET')
     exclude_vars = ('ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
@@ -608,11 +608,11 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
                      input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
                      ssebop_link=ssebop_link)
-        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=True)
+        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
-                             already_preprocessed=True)
-        gw.reproject_shapefiles(already_reprojected=True)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=2e+4)
+                             already_preprocessed=load_files)
+        gw.reproject_shapefiles(already_reprojected=load_files)
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
@@ -620,9 +620,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.create_water_stress_index_rasters(already_created=load_files)
         gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=False)
+                                 load_df=load_files)
+        max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                  load_model=load_rf_model, max_features=7, plot_graphs=False)
+                                  load_model=load_rf_model, max_features=max_features, plot_graphs=False)
         actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                         drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                         exclude_vars=exclude_vars, exclude_years=(), only_pred=False)

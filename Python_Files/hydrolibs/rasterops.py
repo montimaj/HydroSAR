@@ -765,7 +765,7 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
     et_file = read_raster_as_arr(et_raster)[1]
     agri_file = read_raster_as_arr(agri_raster)[1]
     urban_file = read_raster_as_arr(urban_raster)[1]
-    ws_vars = ['WS', 'WS_ET']
+    ws_vars = ['WS_PA', 'WS_PT', 'WS_PA_EA', 'WS_PT_ET']
     for poly in watershed_shp['geometry']:
         p_crop_arr = mask(precip_file, [poly])[0]
         et_crop_arr = mask(et_file, [poly])[0]
@@ -774,13 +774,19 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
         agri_count = len(list(agri_crop_arr[agri_crop_arr > 0]))
         urban_count = len(list(urban_crop_arr[urban_crop_arr > 0]))
         p_avg = np.nanmean(p_crop_arr)
+        p_total = np.nansum(p_crop_arr)
         et_avg = np.nanmean(et_crop_arr)
+        e_total = np.nansum(et_crop_arr)
         lu = agri_count + urban_count / 2
-        ws = (p_avg - lu) / (p_avg + lu)
-        p_et = np.abs(p_avg - et_avg)
-        ws_et = (p_et - lu) / (p_et + lu)
-        watershed_shp.loc[watershed_shp['geometry'] == poly, ws_vars[0]] = np.abs(ws)
-        watershed_shp.loc[watershed_shp['geometry'] == poly, ws_vars[1]] = np.abs(ws_et)
+        ws_pa = (p_avg - lu) / (p_avg + lu)
+        ws_pt = (p_total - lu) / (p_total + lu)
+        pa_ea = p_avg - et_avg
+        pt_et = p_total - e_total
+        ws_pa_ea = (pa_ea - lu) / (pa_ea + lu)
+        ws_pt_et = (pt_et - lu) / (pt_et + lu)
+        ws_values = [ws_pa, ws_pt, ws_pa_ea, ws_pt_et]
+        for ws_var, ws_value in zip(ws_vars, ws_values):
+            watershed_shp.loc[watershed_shp['geometry'] == poly, ws_var] = np.abs(ws_value)
     for ws_var in ws_vars:
         watershed_shp[ws_var] -= np.min(watershed_shp[ws_var])
         watershed_shp[ws_var] /= np.ptp(watershed_shp[ws_var])
@@ -790,12 +796,10 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
     watershed_shp.to_file(watershed_stress_shp_file)
     transform = precip_file.get_transform()
     xres, yres = transform[1], transform[5]
-    ws_out_raster_file = output_dir + 'WS_' + year + '.tif'
-    ws_et_out_raster_file = output_dir + 'WS_ET_' + year + '.tif'
-    shp2raster(watershed_stress_shp_file, gridding=False, value_field=ws_vars[0], add_value=False, xres=xres, yres=yres,
-               gdal_path=gdal_path, outfile_path=ws_out_raster_file)
-    shp2raster(watershed_stress_shp_file, gridding=False, value_field=ws_vars[1], add_value=False, xres=xres, yres=yres,
-               gdal_path=gdal_path, outfile_path=ws_et_out_raster_file)
+    for ws_var in ws_vars:
+        ws_out_raster_file = output_dir + ws_var + '_' + year + '.tif'
+        shp2raster(watershed_stress_shp_file, gridding=False, value_field=ws_var, add_value=False, xres=xres,
+                   yres=yres, gdal_path=gdal_path, outfile_path=ws_out_raster_file)
 
 
 def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir, rep_landuse=True,
