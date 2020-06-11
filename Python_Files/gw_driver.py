@@ -335,12 +335,17 @@ class HydroML:
         :return: None
         """
 
+        ws_out_dir = make_proper_dir_name(self.file_dir + 'WS_Rasters')
+        makedirs([ws_out_dir])
         if not already_created:
             input_raster_dir_list = [self.raster_reproj_dir] * 2 + [self.land_use_dir_list[0],
                                                                     self.land_use_dir_list[2]]
             rops.compute_water_stress_index_rasters(self.input_watershed_reproj_file, pattern_list=pattern_list,
                                                     input_raster_dir_list=input_raster_dir_list,
-                                                    rep_landuse=rep_landuse, output_dir=self.raster_reproj_dir)
+                                                    rep_landuse=rep_landuse, output_dir=ws_out_dir,
+                                                    gdal_path=self.gdal_path)
+            rops.reproject_rasters(ws_out_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
+                                   pattern='*.tif', gdal_path=self.gdal_path)
         else:
             print('Water stress rasters already created')
 
@@ -608,16 +613,16 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        gw.create_water_stress_index_rasters(already_created=False)
-        # gw.mask_rasters(already_masked=False)
-        # df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
-        #                          load_df=False)
-        # rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
-        #                           load_model=load_rf_model, max_features=5, plot_graphs=False)
-        # pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
-        #                                  pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
-        #                                  only_pred=False)
-    # ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
+        gw.create_water_stress_index_rasters(already_created=load_files)
+        gw.mask_rasters(already_masked=load_files)
+        df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
+                                 load_df=False)
+        rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
+                                  load_model=load_rf_model, max_features=7, plot_graphs=False)
+        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
+                                         pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
+                                         only_pred=False)
+    ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
 
 
 # run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)

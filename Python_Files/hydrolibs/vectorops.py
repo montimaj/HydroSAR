@@ -239,7 +239,7 @@ def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
 
 
 def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0, xres=1000., yres=1000., gridding=True,
-               smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+               smoothing=4800, add_value=True, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert Shapefile to Raster TIFF file
     :param input_shp_file: Input Shapefile path
@@ -251,6 +251,7 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
     :param gridding: Set false to use gdal_rasterize (If gridding is True, the Inverse Distance Square algorithm used
     with default parameters)
     :param smoothing: Level of smoothing (higher values imply higher smoothing effect)
+    :param add_value: Set False to disable adding value to existing raster cell
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: None
@@ -268,6 +269,10 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
         args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
                 str(miny), str(maxx), str(maxy), '-init', str(0.0), '-add', '-ot', 'Float32', '-of', 'GTiff',
                 '-a_nodata', str(no_data_value), input_shp_file, outfile_path]
+        if not add_value:
+            args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
+                    str(miny), str(maxx), str(maxy), '-ot', 'Float32', '-of', 'GTiff', '-a_nodata', str(no_data_value),
+                    input_shp_file, outfile_path]
     else:
         gdal_command = 'gdal_grid'
         xsize = np.int(np.round((maxx - minx) / xres))

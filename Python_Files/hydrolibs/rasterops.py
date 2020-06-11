@@ -20,7 +20,8 @@ from shapely.geometry import Point
 from collections import defaultdict
 from datetime import datetime
 from glob import glob
-from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str
+from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str, make_proper_dir_name, makedirs
+from Python_Files.hydrolibs.vectorops import shp2raster
 
 NO_DATA_VALUE = -32767.0
 
@@ -741,12 +742,15 @@ def fix_large_values(input_raster_dir, outdir, max_threshold=1e+5, pattern='GW*.
         write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=out_raster)
 
 
-def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, output_dir):
+def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, output_dir,
+                                      gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
     :param watershed_shp_file: Watershed shape file consisting of watershed polygons
     :param raster_file_list: List of raster file paths ordered by P, ET (or SSEBop), AGRI, and URBAN
     :param output_dir: Output directory to store water stress rasters
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: None
     """
 
@@ -761,8 +765,7 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
     et_file = read_raster_as_arr(et_raster)[1]
     agri_file = read_raster_as_arr(agri_raster)[1]
     urban_file = read_raster_as_arr(urban_raster)[1]
-    ws_arr = np.full_like(precip_arr, fill_value=np.nan)
-    ws_et_arr = np.full_like(precip_arr, fill_value=np.nan)
+    ws_vars = ['WS', 'WS_ET']
     for poly in watershed_shp['geometry']:
         p_crop_arr = mask(precip_file, [poly])[0]
         et_crop_arr = mask(et_file, [poly])[0]
@@ -773,31 +776,31 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
         p_avg = np.nanmean(p_crop_arr)
         et_avg = np.nanmean(et_crop_arr)
         lu = agri_count + urban_count / 2
-        ws = np.abs((p_avg - lu) / (p_avg + lu))
+        ws = (p_avg - lu) / (p_avg + lu)
         p_et = np.abs(p_avg - et_avg)
-        ws_et = np.abs((p_et - lu) / (p_et + lu))
-        watershed_shp.loc[watershed_shp['geometry'] == poly, 'WS'] = ws
-        watershed_shp.loc[watershed_shp['geometry'] == poly, 'WS_ET'] = ws_et
-    for idx, value in np.ndenumerate(ws_arr):
-        gx, gy = precip_file.xy(idx[0], idx[1])
-        gp = Point(gx, gy)
-        for poly in watershed_shp['geometry']:
-            if poly.contains(gp):
-                curr_watershed = watershed_shp[watershed_shp['geometry'] == poly]
-                ws_arr[idx] = list(curr_watershed['WS'])[0]
-                ws_et_arr[idx] = list(curr_watershed['WS_ET'])[0]
-    ws_arr[~np.isnan(ws_arr)] /= np.nanmax(ws_arr)
-    ws_et_arr[~np.isnan(ws_et_arr)] /= np.nanmax(ws_et_arr)
-    ws_arr[np.isnan(ws_arr)] = precip_file.nodata
-    ws_et_arr[np.isnan(ws_et_arr)] = precip_file.nodata
-    out_ws_path = output_dir + 'WS_' + year + '.tif'
-    out_ws_et_path = output_dir + 'WS_ET_' + year + '.tif'
-    write_raster(ws_arr, precip_file, transform=precip_file.transform, outfile_path=out_ws_path)
-    write_raster(ws_et_arr, precip_file, transform=precip_file.transform, outfile_path=out_ws_et_path)
+        ws_et = (p_et - lu) / (p_et + lu)
+        watershed_shp.loc[watershed_shp['geometry'] == poly, ws_vars[0]] = np.abs(ws)
+        watershed_shp.loc[watershed_shp['geometry'] == poly, ws_vars[1]] = np.abs(ws_et)
+    for ws_var in ws_vars:
+        watershed_shp[ws_var] -= np.min(watershed_shp[ws_var])
+        watershed_shp[ws_var] /= np.ptp(watershed_shp[ws_var])
+    ws_shp_dir = make_proper_dir_name(watershed_shp_file[:watershed_shp_file.rfind(os.sep) + 1] + 'WS_Shp')
+    makedirs([ws_shp_dir])
+    watershed_stress_shp_file = ws_shp_dir + 'Watershed_Stress_' + year + '.shp'
+    watershed_shp.to_file(watershed_stress_shp_file)
+    transform = precip_file.get_transform()
+    xres, yres = transform[1], transform[5]
+    ws_out_raster_file = output_dir + 'WS_' + year + '.tif'
+    ws_et_out_raster_file = output_dir + 'WS_ET_' + year + '.tif'
+    shp2raster(watershed_stress_shp_file, gridding=False, value_field=ws_vars[0], add_value=False, xres=xres, yres=yres,
+               gdal_path=gdal_path, outfile_path=ws_out_raster_file)
+    shp2raster(watershed_stress_shp_file, gridding=False, value_field=ws_vars[1], add_value=False, xres=xres, yres=yres,
+               gdal_path=gdal_path, outfile_path=ws_et_out_raster_file)
 
 
 def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir, rep_landuse=True,
-                                       pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif')):
+                                       pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
+                                       gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
     :param watershed_shp_file: Watershed shape file consisting of watershed polygons
@@ -807,6 +810,8 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     :param rep_landuse: Set True to replicate landuse raster file paths (should be True if same AGRI and URBAN are used
     for all years)
     :param pattern_list: Raster pattern list ordered by P, ET, AGRI, and URBAN
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: None
     """
 
@@ -822,5 +827,5 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     num_cores = multiprocessing.cpu_count()
     raster_file_lists = zip(precip_file_list, et_file_list, agri_file_list, urban_file_list)
     Parallel(n_jobs=num_cores)(delayed(compute_water_stress_index_raster)(watershed_shp_file, raster_file_list,
-                                                                          output_dir)
+                                                                          output_dir, gdal_path)
                                for raster_file_list in raster_file_lists)
