@@ -65,7 +65,7 @@ def create_gw_time_series(actual_gw_file_dir, pred_gw_file_dir, grace_dir, actua
 
 def create_gw_forecast_time_series(actual_gw_file_dir_list, pred_gw_file_dir_list, grace_csv, gmd_name_list=None,
                                    use_gmds=True, actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif',
-                                   out_dir='../Outputs/'):
+                                   out_dir='../Outputs/', exclude_years=(), forecast_years=()):
     """
     Create GW and GRACE dataframes
     :param actual_gw_file_dir_list: Actual GW pumping raster directory list
@@ -76,6 +76,8 @@ def create_gw_forecast_time_series(actual_gw_file_dir_list, pred_gw_file_dir_lis
     :param actual_gw_pattern: Actual GW pumping raster file pattern
     :param pred_gw_pattern: Predicted GW pumping raster file pattern
     :param out_dir: Output directory for storing the CSV files
+    :param exclude_years: Exclude these years from analysis
+    :param forecast_years: Set these years as forecast years
     :return: Two dataframes, one with the GW pumping values and the other containing the monthly GRACE values
     """
 
@@ -89,13 +91,15 @@ def create_gw_forecast_time_series(actual_gw_file_dir_list, pred_gw_file_dir_lis
         actual_gw_raster_dict = rops.create_raster_dict(actual_gw_file_dir, pattern=actual_gw_pattern)
         pred_gw_raster_dict = rops.create_raster_dict(pred_gw_file_dir, pattern=pred_gw_pattern)
         years = sorted(list(pred_gw_raster_dict.keys()))
+        for ey in exclude_years:
+            years.remove(ey)
         mean_actual_gw = {}
         mean_pred_gw = {}
         for year in years:
             pred_raster = pred_gw_raster_dict[year]
             pred_raster = pred_raster.reshape(pred_raster.shape[0] * pred_raster.shape[1])
             mean_pred_gw[year] = np.nanmean(pred_raster)
-            if year in actual_gw_raster_dict.keys():
+            if year in actual_gw_raster_dict.keys() and year not in forecast_years:
                 actual_raster = actual_gw_raster_dict[year]
                 actual_raster = actual_raster.reshape(actual_raster.shape[0] * actual_raster.shape[1])
                 mean_actual_gw[year] = np.nanmean(actual_raster)
@@ -177,12 +181,12 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     df1.set_index('YEAR').plot(ax=ax1)
     df2.set_index('DT').plot(ax=ax2)
     df2_years = list(df2.DT)
-    ax1.axvspan(2010.5, 2018.5, color='#a6bddb', alpha=0.6)
-    # min_forecast_yr = min(forecast_years)
+    ax1.axvspan(2010.5, 2019.5, color='#a6bddb', alpha=0.6)
+    min_forecast_yr = min(forecast_years)
     ax1.set_xlim(left=np.min(df1.YEAR) - 0.1, right=np.max(df1.YEAR) + 0.1)
-    # ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
-    ax1.legend(loc=2, ncol=3, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
-               labels=['Actual GW', 'Predicted GW', 'Test Years'])
+    ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
+    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
+               labels=['Actual GW', 'Predicted GW', 'Test Years', 'Forecast'])
     ax1.set_ylabel('Mean GW Pumping (mm)')
     ax1.set_xticks(df1.YEAR)
     ax1.set_xticklabels(df1.YEAR)
@@ -267,10 +271,10 @@ def preprocess_gmds(actual_gw_dir, pred_gw_dir, input_gmd_file, out_dir, actual_
         makedirs([actual_outdir, pred_outdir])
         actual_gw_dir_list.append(actual_outdir)
         pred_gw_dir_list.append(pred_outdir)
-        rops.crop_multiple_rasters(input_raster_dir=actual_gw_dir, input_shp_file=gmd_shp,
-                                   pattern=actual_gw_pattern, outdir=actual_outdir)
-        rops.crop_multiple_rasters(input_raster_dir=pred_gw_dir, input_shp_file=gmd_shp, pattern=pred_gw_pattern,
-                                   outdir=pred_outdir)
+        rops.crop_rasters(input_raster_dir=actual_gw_dir, input_mask_file=gmd_shp, pattern=actual_gw_pattern,
+                          outdir=actual_outdir, ext_mask=False)
+        rops.crop_rasters(input_raster_dir=pred_gw_dir, input_mask_file=gmd_shp, pattern=pred_gw_pattern,
+                          outdir=pred_outdir, ext_mask=False)
     return actual_gw_dir_list, pred_gw_dir_list, gmd_name_list
 
 
@@ -304,7 +308,7 @@ def calculate_gmd_stats(gw_df, gmd_name_list, out_dir, train_end=2010, test_star
 
 
 def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gmd_file=None, use_gmds=True,
-                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif'):
+                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif', exclude_years=(), forecast_years=()):
     """
     Run model analysis to get actual vs predicted graph along with GRACE TWSA variations
     :param actual_gw_dir: Directory containing the actual data
@@ -315,6 +319,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gmd_file=
     :param use_gmds: Set False to use entire GW raster for analysis
     :param actual_gw_pattern: Actual GW pumping raster file pattern
     :param pred_gw_pattern: Predicted GW pumping raster file pattern
+    :param exclude_years: Exclude these years from analysis
+    :param forecast_years: Set these years as forecast years
     :return: None
     """
 
@@ -323,7 +329,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gmd_file=
     if not use_gmds:
         ts_df = create_gw_forecast_time_series([actual_gw_dir], [pred_gw_dir], grace_csv=grace_csv, out_dir=out_dir,
                                                actual_gw_pattern=actual_gw_pattern, pred_gw_pattern=pred_gw_pattern,
-                                               use_gmds=use_gmds)
+                                               use_gmds=use_gmds, exclude_years=exclude_years,
+                                               forecast_years=forecast_years)
         ts_df = ts_df[0], ts_df[2]
         create_time_series_forecast_plot(ts_df)
     else:
@@ -333,7 +340,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gmd_file=
 
         ts_df = create_gw_forecast_time_series(actual_gw_dir_list, pred_gw_dir_list, gmd_name_list=gmd_name_list,
                                                grace_csv=grace_csv, use_gmds=use_gmds, out_dir=out_dir,
-                                               actual_gw_pattern=actual_gw_pattern, pred_gw_pattern=pred_gw_pattern)
+                                               actual_gw_pattern=actual_gw_pattern, pred_gw_pattern=pred_gw_pattern,
+                                               exclude_years=exclude_years, forecast_years=forecast_years)
 
         print(calculate_gmd_stats(ts_df[1], gmd_name_list, out_dir))
         ts_df = ts_df[0], ts_df[2]

@@ -206,8 +206,8 @@ class HydroML:
             if use_ama_ina:
                 raster_mask = self.input_ama_ina_reproj_file
                 multi_poly = True
-            rops.crop_rasters(self.output_gw_raster_dir, outdir=cropped_dir, input_mask_file=raster_mask,
-                              ext_mask=ext_mask, gdal_path=self.gdal_path, multi_poly=multi_poly)
+            rops.crop_rasters(self.final_gw_dir, outdir=cropped_dir, input_mask_file=raster_mask, ext_mask=ext_mask,
+                              gdal_path=self.gdal_path, multi_poly=multi_poly)
         else:
             print('GW rasters already cropped')
         self.final_gw_dir = cropped_dir
@@ -475,7 +475,7 @@ class HydroML:
         return rf_model
 
     def get_predictions(self, rf_model, pred_years, column_names=None, ordering=False, pred_attr='GW',
-                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=()):
+                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=(), use_full_extent=False):
         """
         Get prediction results and/or rasters
         :param rf_model: Fitted RandomForestRegressor model
@@ -487,17 +487,21 @@ class HydroML:
         :param exclude_vars: Exclude these variables from the model prediction analysis
         :param exclude_years: List of years to exclude from dataframe
         :param drop_attrs: Drop these specified attributes
-        :return: Predicted raster directory path
+        :param use_full_extent: Set True to predict over entire region
+        :return: Actual and Predicted raster directory paths
         """
 
         print('Predicting...')
         pred_out_dir = make_proper_dir_name(self.output_dir + 'Predicted_Rasters')
         makedirs([pred_out_dir])
+        actual_raster_dir = self.rf_data_dir
+        if use_full_extent:
+            actual_raster_dir = self.pred_data_dir
         rfr.predict_rasters(rf_model, pred_years=pred_years, drop_attrs=drop_attrs, out_dir=pred_out_dir,
-                            actual_raster_dir=self.rf_data_dir, pred_attr=pred_attr, only_pred=only_pred,
+                            actual_raster_dir=actual_raster_dir, pred_attr=pred_attr, only_pred=only_pred,
                             exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
                             ordering=ordering)
-        return pred_out_dir
+        return actual_raster_dir, pred_out_dir
 
 
 def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True):
@@ -522,7 +526,7 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
     input_gdb_dir = input_dir + 'ks_pd_data_updated2018.gdb'
     input_state_file = input_dir + 'Kansas/kansas.shp'
     gdal_path = 'C:/OSGeo4W64/'
-    gw_dir = file_dir + 'RF_Data/'
+    actual_gw_dir = file_dir + 'Pred_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ks_class_dict = {(0, 59.5): 1,
@@ -549,10 +553,10 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
         df = gw.create_dataframe(year_list=range(2002, 2020), load_df=load_files)
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=5, plot_graphs=False)
-        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020), drop_attrs=drop_attrs,
-                                         pred_attr=pred_attr, only_pred=False)
-    ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=use_gmds, input_gmd_file=input_gmd_file,
-                    out_dir=output_dir)
+        actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
+                                                        drop_attrs=drop_attrs, pred_attr=pred_attr, only_pred=False)
+    ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=use_gmds, input_gmd_file=input_gmd_file,
+                    out_dir=output_dir, forecast_years=(2019,))
 
 
 def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
@@ -578,7 +582,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
     gdal_path = 'C:/OSGeo4W64/'
-    gw_dir = file_dir + 'RF_Data/'
+    actual_gw_dir = file_dir + 'RF_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
@@ -606,24 +610,25 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      ssebop_link=ssebop_link)
         gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=True)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
-                             already_preprocessed=load_files)
-        gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=1e+5)
+                             already_preprocessed=True)
+        gw.reproject_shapefiles(already_reprojected=True)
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=2e+4)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
         gw.create_water_stress_index_rasters(already_created=load_files)
         gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2019), exclude_vars=exclude_vars, exclude_years=(),
+        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
                                  load_df=False)
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=7, plot_graphs=False)
-        pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2019), drop_attrs=drop_attrs,
-                                         pred_attr=pred_attr, exclude_vars=exclude_vars, exclude_years=(),
-                                         only_pred=False)
-    ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir)
+        actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
+                                                        drop_attrs=drop_attrs, pred_attr=pred_attr,
+                                                        exclude_vars=exclude_vars, exclude_years=(), only_pred=False)
+    ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
+                    forecast_years=(2019,))
 
 
-# run_gw_ks(analyze_only=False, load_files=False, load_rf_model=False, use_gmds=True)
+# run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
 run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)

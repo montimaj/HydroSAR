@@ -612,7 +612,7 @@ def parallel_raster_compute(raster_file, shp_file, outdir, nan_fill=0, point_ari
                        verbose=verbose)
 
 
-def convert_gw_data(input_raster_dir, outdir, pattern='*.tif'):
+def convert_gw_data(input_raster_dir, outdir, max_gw=1e+5, pattern='*.tif'):
     """
     Convert groundwater data (in acreft) to mm
     :param input_raster_dir: Input raster directory
