@@ -598,7 +598,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'WS_PT', 'WS_PT_ET')
+    drop_attrs = ('YEAR',)
     exclude_vars = ('ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
