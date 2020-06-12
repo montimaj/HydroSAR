@@ -4,7 +4,7 @@
 import pandas as pd
 from Python_Files.hydrolibs import rasterops as rops
 from Python_Files.hydrolibs import vectorops as vops
-from Python_Files.hydrolibs import process_ssebop as pssebop
+from Python_Files.hydrolibs import data_download as dd
 from Python_Files.hydrolibs.sysops import makedirs, make_proper_dir_name, copy_files
 from Python_Files.hydrolibs import random_forest_regressor as rfr
 from Python_Files.hydrolibs import model_analysis as ma
@@ -13,21 +13,21 @@ from glob import glob
 
 class HydroML:
 
-    def __init__(self, input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=None, input_ama_ina_file=None,
-                 input_watershed_file=None, ssebop_link=None):
+    def __init__(self, input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
+                 input_state_file, gdal_path, input_ts_dir=None, input_cdl_file=None, input_gw_boundary_file=None,
+                 input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
         :param file_dir: Directory for storing intermediate files
         :param output_dir: Output directory
-        :param input_ts_dir: Input directory containing the time series data
         :param output_shp_dir: Output shapefile directory
         :param output_gw_raster_dir: Output GW raster directory
-        :param input_state_file: Input state shapefile
-        :param input_cdl_file: Input NASS CDL file path
+        :param input_state_file: Input state shapefile (must be in WGS84)
+        :param input_cdl_file: Input NASS CDL file path, set None to automatically download
         :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
         Linux or Mac and 'C:/OSGeo4W64/' on Windows
+        :param input_ts_dir: Input directory containing the time series data, set None to automatically download data
         :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
         :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona. Set None for Kansas.
         :param input_watershed_file: The file path to the Arizona surface watershed shapefile. Set None for Kansas.
@@ -37,7 +37,6 @@ class HydroML:
         self.input_dir = make_proper_dir_name(input_dir)
         self.file_dir = make_proper_dir_name(file_dir)
         self.output_dir = make_proper_dir_name(output_dir)
-        self.input_ts_dir = make_proper_dir_name(input_ts_dir)
         self.output_shp_dir = make_proper_dir_name(output_shp_dir)
         self.output_gw_raster_dir = make_proper_dir_name(output_gw_raster_dir)
         self.gdal_path = make_proper_dir_name(gdal_path)
@@ -47,6 +46,7 @@ class HydroML:
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.ssebop_link = ssebop_link
+        self.input_ts_dir = input_ts_dir
         self.input_gw_boundary_reproj_file = None
         self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
@@ -61,30 +61,56 @@ class HydroML:
         self.rf_data_dir = None
         self.pred_data_dir = None
         self.lu_mask_dir = None
-        self.ssebop_zip_dir = self.input_dir + 'SSEBop_Data/'
-        self.ssebop_out_dir = self.ssebop_zip_dir + 'SSEBop_Files/'
-        self.ssebop_reproj_dir = self.ssebop_out_dir + 'SSEBop_Reproj/'
-        self.ssebop_year_list = None
-        self.ssebop_month_list = None
+        self.ssebop_file_dir = None
+        self.ssebop_reproj_dir = None
+        self.data_year_list = None
+        self.data_month_list = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
-    def download_ssebop_data(self, year_list, month_list, already_downloaded=False):
+    def download_data(self, year_list, month_list, cdl_year=2015, already_downloaded=False, already_extracted=False):
         """
         Download, extract, and preprocess SSEBop data
         :param year_list: List of years %yyyy format
         :param month_list: List of months in %m format
+        :param cdl_year: CDL year
         :param already_downloaded: Set True to disable downloading
+        :param already_extracted: Set True to disable extraction
         :return: None
         """
 
-        self.ssebop_year_list = year_list
-        self.ssebop_month_list = month_list
+        self.data_year_list = year_list
+        self.data_month_list = month_list
+        gee_data_flag = False
+        if self.input_ts_dir is None:
+            self.input_ts_dir = self.input_dir + 'Downloaded_Data/'
+            gee_data_flag = True
+        gee_zip_dir = self.input_ts_dir + 'GEE_Data/'
+        cdl_flag = False
+        cdl_dir = self.input_ts_dir + 'CDL/'
+        if self.input_cdl_file is None:
+            self.input_cdl_file = cdl_dir + 'CDL_' + str(cdl_year) + '.tif'
+            cdl_flag = True
+        ssebop_zip_dir = self.input_ts_dir + 'SSEBop_Data/'
+        self.ssebop_file_dir = ssebop_zip_dir + 'SSEBop_Files/'
         if not already_downloaded:
-            makedirs([self.ssebop_zip_dir, self.ssebop_out_dir])
-            pssebop.download_ssebop_data(self.ssebop_link, year_list, month_list, self.ssebop_zip_dir)
-            pssebop.extract_data(self.ssebop_zip_dir, self.ssebop_out_dir)
-        else:
-            print('SSEBop data already downloaded and extracted...')
+            if cdl_flag:
+                makedirs([cdl_dir])
+                dd.download_cropland_data(self.input_state_file, year=cdl_year, outfile=self.input_cdl_file)
+            if gee_data_flag:
+                makedirs([gee_zip_dir])
+                dd.download_gee_data(year_list, start_month=month_list[0], end_month=month_list[-1],
+                                     aoi_shp_file=self.input_state_file, outdir=gee_zip_dir)
+            makedirs([ssebop_zip_dir])
+            dd.download_ssebop_data(self.ssebop_link, year_list, month_list, ssebop_zip_dir)
+        if gee_data_flag:
+            self.input_ts_dir = gee_zip_dir + 'GEE_Files/'
+        if not already_extracted:
+            if gee_data_flag:
+                makedirs([self.input_ts_dir])
+                dd.extract_data(gee_zip_dir, out_dir=self.input_ts_dir, rename_extracted_files=True)
+            makedirs([self.ssebop_file_dir])
+            dd.extract_data(ssebop_zip_dir, self.ssebop_file_dir)
+        print('CDL, GEE, and SSEBop data downloaded and extracted...')
 
     def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr=None,
                           filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
@@ -282,6 +308,7 @@ class HydroML:
         """
 
         self.raster_reproj_dir = make_proper_dir_name(self.file_dir + 'Reproj_Rasters')
+        self.ssebop_reproj_dir = self.ssebop_file_dir + 'SSEBop_Reproj/'
         if not already_reprojected:
             print('Reprojecting rasters...')
             makedirs([self.raster_reproj_dir])
@@ -289,10 +316,10 @@ class HydroML:
                                    pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir])
-                rops.reproject_rasters(self.ssebop_out_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
+                rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
-                pssebop.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.ssebop_year_list,
-                                                    month_list=self.ssebop_month_list, out_dir=self.raster_reproj_dir)
+                rops.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.data_year_list,
+                                                 month_list=self.data_month_list, out_dir=self.raster_reproj_dir)
         else:
             print('All rasters already reprojected')
 
@@ -325,13 +352,14 @@ class HydroML:
             print('Land use rasters already created')
 
     def create_water_stress_index_rasters(self, pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
-                                          rep_landuse=True, already_created=False):
+                                          rep_landuse=True, already_created=False, normalize=False):
         """
         Create water stress index rasters based on P, ET, and landuse
         :param pattern_list: Raster pattern list ordered by P, ET (or SSEBop), AGRI, and URBAN
         :param rep_landuse: Set True to replicate landuse raster file paths (should be True if same AGRI and URBAN are
         used for all years)
         :param already_created: Set True to disable water stress raster creation
+        :param normalize: Set True to normalize water stress index
         :return: None
         """
 
@@ -343,7 +371,7 @@ class HydroML:
             rops.compute_water_stress_index_rasters(self.input_watershed_reproj_file, pattern_list=pattern_list,
                                                     input_raster_dir_list=input_raster_dir_list,
                                                     rep_landuse=rep_landuse, output_dir=ws_out_dir,
-                                                    gdal_path=self.gdal_path)
+                                                    gdal_path=self.gdal_path, normalize=normalize)
             rops.reproject_rasters(ws_out_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern='*.tif', gdal_path=self.gdal_path)
         else:
@@ -541,8 +569,9 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
     drop_attrs = ('YEAR',)
     pred_attr = 'GW'
     if not analyze_only:
-        gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                     input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_gmd_file)
+        gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir, input_state_file,
+                     gdal_path, input_ts_dir=input_ts_dir, input_cdl_file=input_cdl_file,
+                     input_gw_boundary_file=input_gmd_file)
         gw.extract_shp_from_gdb(input_gdb_dir, year_list=range(2002, 2019), already_extracted=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files)
@@ -572,12 +601,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     input_dir = '../Inputs/Data/Arizona_GW/'
     file_dir = '../Inputs/Files_AZ_' + gee_data[0]
     output_dir = '../Outputs/Output_AZ_' + gee_data[0]
-    input_ts_dir = input_dir + 'GEE_Data_' + gee_data[0]
     output_shp_dir = file_dir + 'GW_Shapefiles/'
     output_gw_raster_dir = file_dir + 'GW_Rasters/'
     input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
     input_ama_ina_file = input_dir + 'Boundary/AMA_and_INA.shp'
-    input_cdl_file = input_dir + 'CDL/CDL_AZ_2015.tif'
     input_watershed_file = input_dir + 'Watersheds/Surface_Watershed.shp'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
@@ -587,8 +614,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
-    ssebop_year_list = range(2002, 2020)
-    ssebop_month_list = range(4, 10)
+    data_year_list = range(2002, 2020)
+    data_month_list = range(4, 10)
     az_class_dict = {(0, 59.5): 1,
                      (66.5, 77.5): 1,
                      (203.5, 255): 1,
@@ -604,11 +631,12 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     fill_attr = 'AF Pumped'
     filter_attr = None
     if not analyze_only:
-        gw = HydroML(input_dir, file_dir, output_dir, input_ts_dir, output_shp_dir, output_gw_raster_dir,
-                     input_state_file, input_cdl_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
+        gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
+                     input_state_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
                      input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
                      ssebop_link=ssebop_link)
-        gw.download_ssebop_data(year_list=ssebop_year_list, month_list=ssebop_month_list, already_downloaded=load_files)
+        gw.download_data(year_list=data_year_list, month_list=data_month_list, already_downloaded=load_files,
+                         already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
@@ -617,10 +645,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        gw.create_water_stress_index_rasters(already_created=load_files)
-        gw.mask_rasters(already_masked=load_files)
+        gw.create_water_stress_index_rasters(already_created=False, normalize=False)
+        gw.mask_rasters(already_masked=False)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=load_files)
+                                 load_df=False)
         max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=max_features, plot_graphs=False)

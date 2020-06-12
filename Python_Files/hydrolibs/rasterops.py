@@ -612,7 +612,7 @@ def parallel_raster_compute(raster_file, shp_file, outdir, nan_fill=0, point_ari
                        verbose=verbose)
 
 
-def convert_gw_data(input_raster_dir, outdir, max_gw=1e+5, pattern='*.tif'):
+def convert_gw_data(input_raster_dir, outdir, pattern='*.tif'):
     """
     Convert groundwater data (in acreft) to mm
     :param input_raster_dir: Input raster directory
@@ -742,13 +742,14 @@ def fix_large_values(input_raster_dir, outdir, max_threshold=1e+5, pattern='GW*.
         write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=out_raster)
 
 
-def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, output_dir,
+def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, output_dir, normalize=False,
                                       gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
     :param watershed_shp_file: Watershed shape file consisting of watershed polygons
     :param raster_file_list: List of raster file paths ordered by P, ET (or SSEBop), AGRI, and URBAN
     :param output_dir: Output directory to store water stress rasters
+    :param normalize: Set True to normalize water stress index
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: None
@@ -777,7 +778,7 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
         p_total = np.nansum(p_crop_arr)
         et_avg = np.nanmean(et_crop_arr)
         e_total = np.nansum(et_crop_arr)
-        lu = agri_count + urban_count / 2
+        lu = agri_count + urban_count / 2.
         ws_pa = (p_avg - lu) / (p_avg + lu)
         ws_pt = (p_total - lu) / (p_total + lu)
         pa_ea = p_avg - et_avg
@@ -786,10 +787,12 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
         ws_pt_et = (pt_et - lu) / (pt_et + lu)
         ws_values = [ws_pa, ws_pt, ws_pa_ea, ws_pt_et]
         for ws_var, ws_value in zip(ws_vars, ws_values):
-            watershed_shp.loc[watershed_shp['geometry'] == poly, ws_var] = np.abs(ws_value)
-    for ws_var in ws_vars:
-        watershed_shp[ws_var] -= np.min(watershed_shp[ws_var])
-        watershed_shp[ws_var] /= np.ptp(watershed_shp[ws_var])
+            watershed_shp.loc[watershed_shp['geometry'] == poly, ws_var] = ws_value
+    if normalize:
+        for ws_var in ws_vars:
+            watershed_shp[ws_var] = np.abs(watershed_shp[ws_var])
+            watershed_shp[ws_var] -= np.min(watershed_shp[ws_var])
+            watershed_shp[ws_var] /= np.ptp(watershed_shp[ws_var])
     ws_shp_dir = make_proper_dir_name(watershed_shp_file[:watershed_shp_file.rfind(os.sep) + 1] + 'WS_Shp')
     makedirs([ws_shp_dir])
     watershed_stress_shp_file = ws_shp_dir + 'Watershed_Stress_' + year + '.shp'
@@ -804,7 +807,7 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
 
 def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir, rep_landuse=True,
                                        pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
-                                       gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+                                       gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', normalize=False):
     """
     Create surface water stress index raster using the formula defined by Smith & Majumdar (2020).
     :param watershed_shp_file: Watershed shape file consisting of watershed polygons
@@ -816,6 +819,7 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     :param pattern_list: Raster pattern list ordered by P, ET, AGRI, and URBAN
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param normalize: Set True to normalize water stress index
     :return: None
     """
 
@@ -831,5 +835,39 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     num_cores = multiprocessing.cpu_count()
     raster_file_lists = zip(precip_file_list, et_file_list, agri_file_list, urban_file_list)
     Parallel(n_jobs=num_cores)(delayed(compute_water_stress_index_raster)(watershed_shp_file, raster_file_list,
-                                                                          output_dir, gdal_path)
+                                                                          output_dir, gdal_path=gdal_path,
+                                                                          normalize=normalize)
                                for raster_file_list in raster_file_lists)
+
+
+def generate_cummulative_ssebop(ssebop_dir, year_list, month_list, out_dir):
+    """
+    Generate cummulative SSEBop data
+    :param ssebop_dir: SSEBop directory
+    :param year_list: List of years
+    :param month_list: List of months
+    :param out_dir: Output directory
+    :return: None
+    """
+
+    for year in year_list:
+        print('Generating cummulative SSEBop for', year, '...')
+        ssebop_raster_arr_list = []
+        ssebop_raster_file_list = []
+        for month in month_list:
+            month_str = str(month)
+            if 1 <= month <= 9:
+                month_str = '0' + month_str
+            pattern = '*' + str(year) + month_str + '*.tif'
+            ssebop_file = glob(ssebop_dir + pattern)[0]
+            ssebop_raster_arr, ssebop_raster_file = read_raster_as_arr(ssebop_file)
+            ssebop_raster_arr_list.append(ssebop_raster_arr)
+            ssebop_raster_file_list.append(ssebop_raster_file)
+        sum_arr_ssebop = ssebop_raster_arr_list[0]
+        for ssebop_raster_arr in ssebop_raster_arr_list[1:]:
+            sum_arr_ssebop += ssebop_raster_arr
+        sum_arr_ssebop[np.isnan(sum_arr_ssebop)] = NO_DATA_VALUE
+        ssebop_raster_file = ssebop_raster_file_list[0]
+        out_ssebop = out_dir + 'SSEBop_' + str(year) + '.tif'
+        write_raster(sum_arr_ssebop, ssebop_raster_file, transform=ssebop_raster_file.transform,
+                     outfile_path=out_ssebop)
