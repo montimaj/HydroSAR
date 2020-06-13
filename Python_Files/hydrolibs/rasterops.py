@@ -878,12 +878,15 @@ def generate_cummulative_ssebop(ssebop_dir, year_list, start_month, end_month, o
     month_list = []
     actual_start_year = year_list[0]
     if end_month <= start_month:
-        year_list = [actual_start_year - 1] + year_list
+        year_list = [actual_start_year - 1] + list(year_list)
         month_flag = True
     else:
         month_list = range(start_month, end_month + 1)
     for year in year_list:
-        print('Generating cummulative SSEBop for', year, '...')
+        actual_year = year
+        if month_flag:
+            actual_year += 1
+        print('Generating cummulative SSEBop for', actual_year, '...')
         if month_flag:
             month_list_y1 = range(start_month, 13)
             month_list_y2 = range(1, end_month + 1)
@@ -902,7 +905,7 @@ def generate_cummulative_ssebop(ssebop_dir, year_list, start_month, end_month, o
         ssebop_raster_file = ssebop_raster_file_list[0]
         out_ssebop = out_dir + 'SSEBop_' + str(year) + '.tif'
         if month_flag:
-            out_ssebop = out_dir + 'SSEBop_' + str(year + 1) + '.tif'
+            out_ssebop = out_dir + 'SSEBop_' + str(actual_year) + '.tif'
         write_raster(sum_arr_ssebop, ssebop_raster_file, transform=ssebop_raster_file.transform,
                      outfile_path=out_ssebop)
         if month_flag and year == year_list[-1] - 1:

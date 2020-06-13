@@ -351,7 +351,7 @@ class HydroML:
         self.raster_reproj_dir = self.file_dir + 'Reproj_Rasters/'
         self.ssebop_reproj_dir = self.ssebop_file_dir + 'SSEBop_Reproj/'
         self.ws_data_reproj_dir = self.file_dir + 'WS_Reproj_Rasters/'
-        self.ws_ssebop_reproj_dir = self.ws_ssebop_file_dir + 'WS_SSEBop_Reproj_Rasters/'
+        self.ws_ssebop_reproj_dir = self.file_dir + 'WS_SSEBop_Reproj_Rasters/'
         if not already_reprojected:
             print('Reprojecting rasters...')
             makedirs([self.raster_reproj_dir])
@@ -367,7 +367,7 @@ class HydroML:
                 rops.reproject_rasters(self.ws_ssebop_file_dir, ref_raster=self.ref_raster,
                                        outdir=self.ws_ssebop_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
                 rops.generate_cummulative_ssebop(self.ws_ssebop_reproj_dir, year_list=self.ws_year_list,
-                                                 start_month=self.data_start_month, end_month=self.data_end_month,
+                                                 start_month=self.ws_start_month, end_month=self.ws_end_month,
                                                  out_dir=self.ws_data_reproj_dir)
                 rops.reproject_rasters(self.ws_data_dir, ref_raster=self.ref_raster, outdir=self.ws_data_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
@@ -691,7 +691,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
                      ssebop_link=ssebop_link)
         gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
-                         already_downloaded=True, already_extracted=True)
+                         already_downloaded=load_files, already_extracted=load_files)
         gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
                             already_downloaded=load_files, already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
@@ -700,7 +700,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
-        gw.reproject_rasters(already_reprojected=False)
+        gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
         gw.create_water_stress_index_rasters(already_created=False, normalize=False)
         gw.mask_rasters(already_masked=False)
@@ -717,4 +717,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=False, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
