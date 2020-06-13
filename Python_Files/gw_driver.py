@@ -702,10 +702,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        gw.create_water_stress_index_rasters(already_created=False, normalize=False)
-        gw.mask_rasters(already_masked=False)
+        gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
+        gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=False)
+                                 load_df=load_files)
         max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=max_features, plot_graphs=False)
@@ -717,4 +717,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=True, load_rf_model=True)
