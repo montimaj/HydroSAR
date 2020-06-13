@@ -29,9 +29,12 @@ def download_gee_data(year_list, start_month, end_month, aoi_shp_file, outdir):
     gee_aoi = ee.Geometry.Rectangle([minx, miny, maxx, maxy])
     for year in year_list:
         start_date = ee.Date.fromYMD(year, start_month, 1)
-        end_date = ee.Date.fromYMD(year, end_month + 1, 1)
         if end_month == 12:
             end_date = ee.Date.fromYMD(year + 1, 1, 1)
+        else:
+            end_date = ee.Date.fromYMD(year, end_month + 1, 1)
+        if end_month <= start_month:
+            start_date = ee.Date.fromYMD(year - 1, start_month, 1)
         mod16_total = mod16_collection.select('ET').filterDate(start_date, end_date).sum().toDouble()
         prism_total = prism_collection.select('ppt').filterDate(start_date, end_date).sum().toDouble()
         mod16_url = mod16_total.getDownloadUrl({
@@ -53,18 +56,33 @@ def download_gee_data(year_list, start_month, end_month, aoi_shp_file, outdir):
             open(local_file_name, 'wb').write(r.content)
 
 
-def download_ssebop_data(sse_link, year_list, month_list, outdir):
+def download_ssebop_data(sse_link, year_list, start_month, end_month, outdir):
     """
     Download SSEBop Data
     :param sse_link: Main SSEBop link without file name
     :param year_list: List of years
-    :param month_list: List of months
+    :param start_month: Start month in %m format
+    :param end_month: End month in %m format
     :param outdir: Download directory
     :return: None
     """
 
+    month_flag = False
+    month_list = []
+    actual_start_year = year_list[0]
+    if end_month <= start_month:
+        year_list = [actual_start_year - 1] + list(year_list)
+        month_flag = True
+    else:
+        month_list = range(start_month, end_month + 1)
     for year in year_list:
         print('Downloading SSEBop for', year, '...')
+        if month_flag:
+            month_list = list(range(start_month, 13))
+            if actual_start_year <= year < year_list[-1]:
+                month_list = list(range(1, end_month + 1)) + month_list
+            elif year == year_list[-1]:
+                month_list = list(range(1, end_month + 1))
         for month in month_list:
             month_str = str(month)
             if 1 <= month <= 9:

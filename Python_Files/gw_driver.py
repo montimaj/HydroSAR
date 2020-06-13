@@ -63,15 +63,25 @@ class HydroML:
         self.lu_mask_dir = None
         self.ssebop_file_dir = None
         self.ssebop_reproj_dir = None
+        self.ws_ssebop_file_dir = None
+        self.ws_ssebop_reproj_dir = None
         self.data_year_list = None
-        self.data_month_list = None
+        self.data_start_month = None
+        self.data_end_month = None
+        self.ws_year_list = None
+        self.ws_start_month = None
+        self.ws_end_month = None
+        self.ws_data_dir = None
+        self.ws_data_reproj_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
-    def download_data(self, year_list, month_list, cdl_year=2015, already_downloaded=False, already_extracted=False):
+    def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
+                      already_extracted=False):
         """
         Download, extract, and preprocess SSEBop data
         :param year_list: List of years %yyyy format
-        :param month_list: List of months in %m format
+        :param start_month: Start month in %m format
+        :param end_month: End month in %m format
         :param cdl_year: CDL year
         :param already_downloaded: Set True to disable downloading
         :param already_extracted: Set True to disable extraction
@@ -79,7 +89,8 @@ class HydroML:
         """
 
         self.data_year_list = year_list
-        self.data_month_list = month_list
+        self.data_start_month = start_month
+        self.data_end_month = end_month
         gee_data_flag = False
         if self.input_ts_dir is None:
             self.input_ts_dir = self.input_dir + 'Downloaded_Data/'
@@ -98,10 +109,10 @@ class HydroML:
                 dd.download_cropland_data(self.input_state_file, year=cdl_year, outfile=self.input_cdl_file)
             if gee_data_flag:
                 makedirs([gee_zip_dir])
-                dd.download_gee_data(year_list, start_month=month_list[0], end_month=month_list[-1],
+                dd.download_gee_data(year_list, start_month=start_month, end_month=end_month,
                                      aoi_shp_file=self.input_state_file, outdir=gee_zip_dir)
             makedirs([ssebop_zip_dir])
-            dd.download_ssebop_data(self.ssebop_link, year_list, month_list, ssebop_zip_dir)
+            dd.download_ssebop_data(self.ssebop_link, year_list, start_month, end_month, ssebop_zip_dir)
         if gee_data_flag:
             self.input_ts_dir = gee_zip_dir + 'GEE_Files/'
         if not already_extracted:
@@ -111,6 +122,36 @@ class HydroML:
             makedirs([self.ssebop_file_dir])
             dd.extract_data(ssebop_zip_dir, self.ssebop_file_dir)
         print('CDL, GEE, and SSEBop data downloaded and extracted...')
+
+    def download_ws_data(self, year_list, start_month, end_month, already_downloaded=False, already_extracted=False):
+        """
+        Download SSEBop and P data for water stress index computation
+        :param year_list: List of years %yyyy format
+        :param start_month: Start month in %m format
+        :param end_month: End month in %m format
+        :param already_downloaded: Set True to disable downloading
+        :param already_extracted: Set True to disable extraction
+        :return: None
+        """
+
+        self.ws_year_list = year_list
+        self.ws_start_month = start_month
+        self.ws_end_month = end_month
+        self.ws_data_dir = self.input_dir + 'WS_Data/'
+        ws_gee_dir = self.ws_data_dir + 'WS_GEE/'
+        ws_ssebop_dir = self.ws_data_dir + 'WS_SSEBop/'
+        self.ws_ssebop_file_dir = ws_ssebop_dir + 'WS_SSEBop_Files/'
+        if not already_downloaded:
+            makedirs([ws_gee_dir, ws_ssebop_dir])
+            dd.download_ssebop_data(self.ssebop_link, year_list, start_month, end_month, ws_ssebop_dir)
+            dd.download_gee_data(year_list, start_month=start_month, end_month=end_month,
+                                 aoi_shp_file=self.input_state_file, outdir=ws_gee_dir)
+
+        if not already_extracted:
+            makedirs([self.ws_ssebop_file_dir])
+            dd.extract_data(ws_ssebop_dir, out_dir=self.ws_ssebop_file_dir)
+            dd.extract_data(ws_gee_dir, out_dir=self.ws_data_dir, rename_extracted_files=True)
+        print('Data for WS metric downloaded...')
 
     def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr=None,
                           filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
@@ -307,19 +348,30 @@ class HydroML:
         :return: None
         """
 
-        self.raster_reproj_dir = make_proper_dir_name(self.file_dir + 'Reproj_Rasters')
+        self.raster_reproj_dir = self.file_dir + 'Reproj_Rasters/'
         self.ssebop_reproj_dir = self.ssebop_file_dir + 'SSEBop_Reproj/'
+        self.ws_data_reproj_dir = self.file_dir + 'WS_Reproj_Rasters/'
+        self.ws_ssebop_reproj_dir = self.ws_ssebop_file_dir + 'WS_SSEBop_Reproj_Rasters/'
         if not already_reprojected:
             print('Reprojecting rasters...')
             makedirs([self.raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
-                makedirs([self.ssebop_reproj_dir])
+                makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
                 rops.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.data_year_list,
-                                                 month_list=self.data_month_list, out_dir=self.raster_reproj_dir)
+                                                 start_month=self.data_start_month, end_month=self.data_end_month,
+                                                 out_dir=self.raster_reproj_dir)
+                rops.reproject_rasters(self.ws_ssebop_file_dir, ref_raster=self.ref_raster,
+                                       outdir=self.ws_ssebop_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+                rops.generate_cummulative_ssebop(self.ws_ssebop_reproj_dir, year_list=self.ws_year_list,
+                                                 start_month=self.data_start_month, end_month=self.data_end_month,
+                                                 out_dir=self.ws_data_reproj_dir)
+                rops.reproject_rasters(self.ws_data_dir, ref_raster=self.ref_raster, outdir=self.ws_data_reproj_dir,
+                                       pattern=pattern, gdal_path=self.gdal_path)
+
         else:
             print('All rasters already reprojected')
 
@@ -366,8 +418,8 @@ class HydroML:
         ws_out_dir = make_proper_dir_name(self.file_dir + 'WS_Rasters')
         makedirs([ws_out_dir])
         if not already_created:
-            input_raster_dir_list = [self.raster_reproj_dir] * 2 + [self.land_use_dir_list[0],
-                                                                    self.land_use_dir_list[2]]
+            input_raster_dir_list = [self.ws_data_reproj_dir] * 2 + [self.land_use_dir_list[0],
+                                                                     self.land_use_dir_list[2]]
             rops.compute_water_stress_index_rasters(self.input_watershed_reproj_file, pattern_list=pattern_list,
                                                     input_raster_dir_list=input_raster_dir_list,
                                                     rep_landuse=rep_landuse, output_dir=ws_out_dir,
@@ -615,7 +667,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
     data_year_list = range(2002, 2020)
-    data_month_list = range(4, 10)
+    data_start_month = 4
+    data_end_month = 9
+    ws_start_month = 10
+    ws_end_month = 5
     az_class_dict = {(0, 59.5): 1,
                      (66.5, 77.5): 1,
                      (203.5, 255): 1,
@@ -635,15 +690,17 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                      input_state_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
                      input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
                      ssebop_link=ssebop_link)
-        gw.download_data(year_list=data_year_list, month_list=data_month_list, already_downloaded=load_files,
-                         already_extracted=load_files)
+        gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
+                         already_downloaded=True, already_extracted=True)
+        gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
+                            already_downloaded=load_files, already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
-        gw.reproject_rasters(already_reprojected=load_files)
+        gw.reproject_rasters(already_reprojected=False)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
         gw.create_water_stress_index_rasters(already_created=False, normalize=False)
         gw.mask_rasters(already_masked=False)
@@ -660,4 +717,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=False, load_rf_model=False)
