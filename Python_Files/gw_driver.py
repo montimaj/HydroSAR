@@ -14,8 +14,8 @@ from glob import glob
 class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
-                 input_state_file, gdal_path, input_ts_dir=None, input_cdl_file=None, input_gw_boundary_file=None,
-                 input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None):
+                 input_state_file, gdal_path, input_ts_dir=None, input_subsidence_dir=None, input_cdl_file=None,
+                 input_gw_boundary_file=None, input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -40,13 +40,14 @@ class HydroML:
         self.output_shp_dir = make_proper_dir_name(output_shp_dir)
         self.output_gw_raster_dir = make_proper_dir_name(output_gw_raster_dir)
         self.gdal_path = make_proper_dir_name(gdal_path)
+        self.input_ts_dir = make_proper_dir_name(input_ts_dir)
+        self.input_subsidence_dir = make_proper_dir_name(input_subsidence_dir)
         self.input_gw_boundary_file = input_gw_boundary_file
         self.input_ama_ina_file = input_ama_ina_file
         self.input_watershed_file = input_watershed_file
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.ssebop_link = ssebop_link
-        self.input_ts_dir = input_ts_dir
         self.input_gw_boundary_reproj_file = None
         self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
@@ -73,6 +74,7 @@ class HydroML:
         self.ws_end_month = None
         self.ws_data_dir = None
         self.ws_data_reproj_dir = None
+        self.annual_subsidence_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -340,6 +342,32 @@ class HydroML:
         else:
             print('Already reclassified')
 
+    def create_subsidence_rasters(self, pattern='*.tif', verbose=False, already_organized=False,
+                                  already_created=False):
+        """
+        Organize ADWR subsidence rasters and then create yearly subsidence rasters
+        :param pattern: File pattern
+        :param verbose: Set True to get additional info
+        :param already_organized: Set True to disable organizing subsidence rasters
+        :param already_created: Set True to disable land use raster generation
+        :return: None
+        """
+
+        converted_subsidence_dir = self.file_dir + 'Converted_Subsidence_Rasters/'
+        ref_raster = glob(self.input_ts_dir + 'P*.tif')[0]
+        if not already_organized:
+            print('Organizing subsidence rasters...')
+            makedirs([converted_subsidence_dir])
+            rops.organize_subsidence_data(self.input_subsidence_dir, output_dir=converted_subsidence_dir,
+                                          ref_raster=ref_raster, gdal_path=self.gdal_path, verbose=verbose)
+        if not already_created:
+            print('Creating annual subsidence rasters...')
+            self.annual_subsidence_dir = self.file_dir + 'Annual_Subsidence_Rasters/'
+            makedirs([self.annual_subsidence_dir])
+            rops.create_annual_subsidence_rasters(converted_subsidence_dir, ref_raster=ref_raster,
+                                                  output_dir=self.annual_subsidence_dir, pattern=pattern)
+        print('Organized and created subsidence rasters...')
+
     def reproject_rasters(self, pattern='*.tif', already_reprojected=False):
         """
         Reproject rasters based on GW as reference raster
@@ -357,6 +385,8 @@ class HydroML:
             makedirs([self.raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.annual_subsidence_dir, ref_raster=self.ref_raster,
+                                   outdir=self.raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
@@ -371,7 +401,6 @@ class HydroML:
                                                  out_dir=self.ws_data_reproj_dir)
                 rops.reproject_rasters(self.ws_data_dir, ref_raster=self.ref_raster, outdir=self.ws_data_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
-
         else:
             print('All rasters already reprojected')
 
@@ -651,6 +680,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
     gee_data = ['Apr_Sept/', 'Apr_Aug/', 'Annual/']
     input_dir = '../Inputs/Data/Arizona_GW/'
+    input_subsidence_dir = input_dir + 'Subsidence/Subsidence_Rasters/'
     file_dir = '../Inputs/Files_AZ_' + gee_data[0]
     output_dir = '../Outputs/Output_AZ_' + gee_data[0]
     output_shp_dir = file_dir + 'GW_Shapefiles/'
@@ -687,9 +717,9 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
     filter_attr = None
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
-                     input_state_file, gdal_path, input_gw_boundary_file=input_well_reg_file,
-                     input_ama_ina_file=input_ama_ina_file, input_watershed_file=input_watershed_file,
-                     ssebop_link=ssebop_link)
+                     input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
+                     input_gw_boundary_file=input_well_reg_file, input_ama_ina_file=input_ama_ina_file,
+                     input_watershed_file=input_watershed_file, ssebop_link=ssebop_link)
         gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
                          already_downloaded=load_files, already_extracted=load_files)
         gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
@@ -698,14 +728,15 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
+        gw.create_subsidence_rasters(already_organized=False, already_created=False)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
-        gw.reproject_rasters(already_reprojected=load_files)
+        gw.reproject_rasters(already_reprojected=False)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
         gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
-        gw.mask_rasters(already_masked=load_files)
+        gw.mask_rasters(already_masked=False)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=load_files)
+                                 load_df=False)
         max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=max_features, plot_graphs=False)
@@ -717,4 +748,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=True, load_rf_model=True)
+run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)

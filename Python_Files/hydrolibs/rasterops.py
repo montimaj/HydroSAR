@@ -457,7 +457,7 @@ def reproject_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif', gda
 
     for raster_file in glob(input_raster_dir + pattern):
         out_raster = outdir + raster_file[raster_file.rfind(os.sep) + 1:]
-        reproject_raster(raster_file, from_raster=ref_raster, outfile_path=out_raster, gdal_path=gdal_path, 
+        reproject_raster(raster_file, from_raster=ref_raster, outfile_path=out_raster, gdal_path=gdal_path,
                          verbose=verbose)
 
 
@@ -558,7 +558,7 @@ def compute_raster_shp(input_raster_file, input_shp_file, outfile_path, nan_fill
 
 
 def compute_rasters_from_shp(input_raster_dir, input_shp_dir, outdir, nan_fill=0, point_arithmetic='sum',
-                             value_field_pos=0, pattern='*.tif', gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', 
+                             value_field_pos=0, pattern='*.tif', gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/',
                              verbose=True):
     """
     Replace/Insert values of all rasters in a directory based on the point coordinates from the shape file and applying
@@ -910,3 +910,86 @@ def generate_cummulative_ssebop(ssebop_dir, year_list, start_month, end_month, o
                      outfile_path=out_ssebop)
         if month_flag and year == year_list[-1] - 1:
             return
+
+
+def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path, verbose=False):
+    """
+    Resample, reproject, and organize subsidence rasters which are originally in ADF format as per ADWR specifications.
+    This module is specifically meant for Arizona.
+    :param input_subsidence_dir: Input subsidence directory
+    :param output_dir: Output directory
+    :param ref_raster: Reference raster file to consider while reprojecting
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param verbose: Set True to print system call info
+    :return: None
+    """
+
+    subsidence_dirs = glob(input_subsidence_dir + '*')
+    num_cores = multiprocessing.cpu_count()
+    Parallel(n_jobs=num_cores)(delayed(parallel_organize_subsidence_data)(subsidence_dir, output_dir, ref_raster,
+                                                                          gdal_path, verbose)
+                               for subsidence_dir in subsidence_dirs)
+
+
+def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path, verbose=False):
+    """
+    Parallely organize subsidence rasters, should be called from #organize_subsidence_data(...)
+    :param input_subsidence_dir: Input subsidence directory
+    :param output_dir: Output directory
+    :param ref_raster: Reference raster file to consider while reprojecting
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param verbose: Set True to print system call info
+    :return: None
+    """
+
+    year_tag_start, year_tag_end = '<CreaDate>', '</CreaDate>'
+    if os.path.isdir(input_subsidence_dir):
+        input_subsidence_dir = make_proper_dir_name(input_subsidence_dir)
+        subsidence_yearly_raster_dir_list = glob(input_subsidence_dir + '*')
+        for subsidence_dir in subsidence_yearly_raster_dir_list:
+            if os.path.isdir(subsidence_dir):
+                subsidence_dir = make_proper_dir_name(subsidence_dir)
+                metadata_file = subsidence_dir + 'metadata.xml'
+                if not os.path.isfile(metadata_file):
+                    continue
+                metadata_content = open(metadata_file).read()
+                year = metadata_content[metadata_content.find(year_tag_start) + len(year_tag_start):
+                                        metadata_content.find(year_tag_end)][:4]
+                input_subsidence_file = subsidence_dir + 'w001001.adf'
+                output_subsidence_file = output_dir + input_subsidence_dir[
+                                                      input_subsidence_dir[:-1].rfind(os.sep) + 1:
+                                                      input_subsidence_dir.rfind(os.sep)] + '_' + year + '.tif'
+                reproject_raster(input_subsidence_file, from_raster=ref_raster, outfile_path=output_subsidence_file,
+                                 gdal_path=gdal_path, verbose=verbose)
+
+
+def create_annual_subsidence_rasters(input_subsidence_dir, ref_raster, output_dir, pattern='*.tif'):
+    """
+    Create annual subsidence rasters based on organized ADWR data
+    :param input_subsidence_dir: Input subsidence directory
+    :param ref_raster: Reference raster file to consider while creating new raster
+    :param output_dir: Output directory
+    :param pattern: File pattern
+    :return: None
+    """
+
+    input_subsidence_raster_files = glob(input_subsidence_dir + pattern)
+    subsidence_dict = defaultdict(lambda: [])
+    for subsidence_file in input_subsidence_raster_files:
+        year = int(subsidence_file[subsidence_file.rfind('_') + 1: subsidence_file.rfind('.')])
+        subsidence_dict[year].append(subsidence_file)
+
+    for year in subsidence_dict.keys():
+        output_subsidence_file = output_dir + 'SUB_' + str(year) + '.tif'
+        output_arr, output_file = read_raster_as_arr(ref_raster)
+        nan_pos = np.isnan(output_arr)
+        output_arr = np.zeros(output_arr.shape)
+        for subsidence_file in subsidence_dict[year]:
+            subsidence_arr = read_raster_as_arr(subsidence_file, get_file=False)
+            subsidence_arr[np.isnan(subsidence_arr)] = 0.
+            subsidence_arr[~np.isfinite(subsidence_arr)] = 0.
+            output_arr += subsidence_arr
+        output_arr[nan_pos] = NO_DATA_VALUE
+        write_raster(output_arr, output_file, transform=output_file.transform, outfile_path=output_subsidence_file)

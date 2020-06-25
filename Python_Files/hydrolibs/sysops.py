@@ -45,6 +45,8 @@ def make_proper_dir_name(dir_str):
     :return: Corrected directory path
     """
 
+    if dir_str is None:
+        return None
     sep = [os.sep, '/']
     if dir_str[-1] not in sep:
         return dir_str + os.sep
