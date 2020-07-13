@@ -993,3 +993,44 @@ def create_annual_subsidence_rasters(input_subsidence_dir, ref_raster, output_di
             output_arr += subsidence_arr
         output_arr[nan_pos] = NO_DATA_VALUE
         write_raster(output_arr, output_file, transform=output_file.transform, outfile_path=output_subsidence_file)
+
+
+def create_crop_coeff_raster(input_cdl_file, output_file):
+    """
+    Create crop coefficient raster based on NASS CDL file
+    :param input_cdl_file: Input CDL file path
+    :param output_file: Output file path
+    :return: None
+    """
+
+    cdl_arr, cdl_file = read_raster_as_arr(input_cdl_file)
+    crop_coeff_arr = np.full_like(cdl_arr, fill_value=1.0)
+    crop_coeff_dict = {1: 1.2, 2: 1.2, 3: 1.2, 4: 1.15, 5: 1.15, 6: 1.15, 10: 1.15, 12: 1.15, 13: 1.2, 14: 1.15,
+                       21: 1.15, 22: 1.15, 23: 1.15, 24: 1.15, 25: 1.2, 26: 1.15, 27: 1.05, 28: 1.15, 29: 1.0, 30: 1.15,
+                       31: 1.15, 32: 1.10, 33: 1.15, 34: 1.15, 36: 1.2, 37: 1.0, 39: 1.15, 41: 1.20, 42: 1.15, 43: 1.15,
+                       45: 1.25, 46: 1.15, 48: 1.0, 49: 1.05, 50: 1.0, 51: 1.0, 52: 1.10, 53: 1.15, 54: 1.15, 55: 1.05,
+                       56: 1.05, 58: 1.15, 66: 1.20, 67: 1.15, 68: 1.15, 69: 0.85, 72: 0.70, 74: 1.15, 75: 0.90,
+                       76: 1.10, 77: 1.20, 204: 1.10, 206: 1.05, 207: 0.95, 208: 1.0, 209: 0.85, 211: 0.70, 212: 0.70,
+                       214: 1.05, 215: 0.85, 216: 1.05, 220: 1.15, 221: 0.85, 222: 0.95, 223: 1.15, 225: 1.15,
+                       226: 1.15, 227: 1.0, 228: 1.0, 230: 2.15, 231: 1.85, 232: 2.20, 233: 2.15, 234: 2.35, 235: 2.35,
+                       236: 2.35, 237: 2.35, 238: 2.35, 239: 2.35, 240: 2.30, 241: 2.35, 242: 1.05, 243: 1.05,
+                       244: 1.05, 245: 1.05, 246: 0.90, 247: 1.10, 248: 1.05, 250: 1.05, 254: 2.30}
+    for crop_code in crop_coeff_dict.keys():
+        crop_coeff_arr[cdl_arr == crop_code] = crop_coeff_dict[crop_code]
+    crop_coeff_arr[cdl_arr == 0] = NO_DATA_VALUE
+    write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
+
+
+def update_crop_coeff_raster(input_crop_coeff_raster, agri_raster):
+    """
+    Update crop coefficient raster based on AGRI raster
+    :param input_crop_coeff_raster: Input crop coefficient raster file path
+    :param agri_raster: Input AGRI raster file path
+    :return: None
+    """
+
+    crop_coeff_arr, crop_coeff_file = read_raster_as_arr(input_crop_coeff_raster)
+    agri_arr = read_raster_as_arr(agri_raster, get_file=False)
+    crop_coeff_arr[np.logical_and(crop_coeff_arr == 1., agri_arr < 0.1)] = 0.
+    write_raster(crop_coeff_arr, crop_coeff_file, transform=crop_coeff_file.transform,
+                 outfile_path=input_crop_coeff_raster)

@@ -56,6 +56,9 @@ class HydroML:
         self.actual_gw_dir = None
         self.ref_raster = None
         self.raster_reproj_dir = None
+        self.crop_coeff_dir = None
+        self.crop_coeff_reproj_dir = None
+        self.crop_coeff_mask_dir = None
         self.reclass_reproj_file = None
         self.raster_mask_dir = None
         self.land_use_dir_list = None
@@ -318,6 +321,20 @@ class HydroML:
             self.final_gw_dir = fixed_dir
         self.actual_gw_dir = self.final_gw_dir
 
+    def create_crop_coeff_raster(self, already_created=False):
+        """
+        Create crop coefficient raster based on the NASS CDL file
+        :param already_created: Set True to disable raster creation
+        :return: None
+        """
+
+        self.crop_coeff_dir = make_proper_dir_name(self.file_dir + 'Crop_Coeff')
+        crop_coeff_file = self.crop_coeff_dir + 'Crop_Coeff.tif'
+        if not already_created:
+            print('Creating crop coefficient raster...')
+            makedirs([self.crop_coeff_dir])
+            rops.create_crop_coeff_raster(self.input_cdl_file, output_file=crop_coeff_file)
+
     def reclassify_cdl(self, reclass_dict, pattern='*.tif', already_reclassified=False):
         """
         Reclassify raster
@@ -380,15 +397,20 @@ class HydroML:
         self.ssebop_reproj_dir = self.ssebop_file_dir + 'SSEBop_Reproj/'
         self.ws_data_reproj_dir = self.file_dir + 'WS_Reproj_Rasters/'
         self.ws_ssebop_reproj_dir = self.file_dir + 'WS_SSEBop_Reproj_Rasters/'
+        self.crop_coeff_reproj_dir = self.crop_coeff_dir + 'Crop_Coeff_Reproj/'
+
         if not already_reprojected:
             print('Reprojecting rasters...')
-            makedirs([self.raster_reproj_dir])
+            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.annual_subsidence_dir, ref_raster=self.ref_raster,
-                                   outdir=self.raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster,
+                                   outdir=self.crop_coeff_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
+                if self.annual_subsidence_dir:
+                    rops.reproject_rasters(self.annual_subsidence_dir, ref_raster=self.ref_raster,
+                                           outdir=self.raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
                 rops.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.data_year_list,
@@ -432,6 +454,21 @@ class HydroML:
         else:
             print('Land use rasters already created')
 
+    def update_crop_coeff_raster(self, pattern='*.tif', already_updated=False):
+        """
+        Update crop coefficient raster according to AGRI
+        :param pattern: AGRI raster file pattern
+        :param already_updated: Set True to disable updation
+        :return: None
+        """
+
+        if not already_updated:
+            print('Updating crop coefficient raster based on AGRI...')
+            agri_file = glob(self.land_use_dir_list[0] + '*_flt.tif')[0]
+            crop_coeff_file = glob(self.crop_coeff_reproj_dir + pattern)[0]
+            rops.update_crop_coeff_raster(crop_coeff_file, agri_file)
+        print('Crop coefficients updated!')
+
     def create_water_stress_index_rasters(self, pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
                                           rep_landuse=True, already_created=False, normalize=False):
         """
@@ -469,10 +506,13 @@ class HydroML:
         self.ref_raster = glob(self.final_gw_dir + pattern)[0]
         self.raster_mask_dir = make_proper_dir_name(self.file_dir + 'Masked_Rasters')
         self.lu_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_LU')
+        self.crop_coeff_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_Crop_Coeff')
         if not already_masked:
             print('Masking rasters...')
-            makedirs([self.raster_mask_dir, self.lu_mask_dir])
+            makedirs([self.raster_mask_dir, self.lu_mask_dir, self.crop_coeff_mask_dir])
             rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
+                              pattern=pattern)
+            rops.mask_rasters(self.crop_coeff_reproj_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_mask_dir,
                               pattern=pattern)
             for lu_dir in self.land_use_dir_list:
                 rops.mask_rasters(lu_dir, ref_raster=self.ref_raster, outdir=self.lu_mask_dir, pattern=pattern)
@@ -507,6 +547,8 @@ class HydroML:
             pattern_list = [pattern] * len(input_dir_list)
             copy_files(input_dir_list, target_dir=self.rf_data_dir, year_list=year_list, pattern_list=pattern_list,
                        verbose=verbose)
+            copy_files([self.crop_coeff_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
+                       pattern_list=[pattern], rep=True, verbose=verbose)
             copy_files([self.lu_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
                        pattern_list=[pattern], rep=True, verbose=verbose)
 
@@ -728,15 +770,16 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
-        gw.create_subsidence_rasters(already_organized=False, already_created=False)
         gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
-        gw.reproject_rasters(already_reprojected=False)
+        gw.create_crop_coeff_raster(already_created=load_files)
+        gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
+        gw.update_crop_coeff_raster(already_updated=load_files)
         gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
-        gw.mask_rasters(already_masked=False)
+        gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=False)
+                                 load_df=load_files)
         max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=max_features, plot_graphs=False)
@@ -748,4 +791,4 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
 
 
 # run_gw_ks(analyze_only=True, load_files=False, load_rf_model=False, use_gmds=True)
-run_gw_az(analyze_only=False, load_files=True, load_rf_model=False)
+run_gw_az(analyze_only=False, load_files=True, load_rf_model=True)
