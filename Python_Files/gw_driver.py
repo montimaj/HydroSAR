@@ -559,6 +559,8 @@ class HydroML:
             pattern_list = [pattern] * len(self.land_use_dir_list)
             copy_files(self.land_use_dir_list, target_dir=self.pred_data_dir, year_list=year_list,
                        pattern_list=pattern_list, rep=True, verbose=verbose)
+            copy_files([self.crop_coeff_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
+                       pattern_list=[pattern], rep=True, verbose=verbose)
             print('Creating dataframe...')
             df = rfr.create_dataframe(self.rf_data_dir, out_df=df_file, column_names=column_names, make_year_col=True,
                                       exclude_vars=exclude_vars, exclude_years=exclude_years, ordering=ordering)
@@ -779,13 +781,14 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False):
         gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
         gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=load_files)
+                                 load_df=False)
         max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
         rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=load_rf_model, max_features=max_features, plot_graphs=False)
         actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                         drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                        exclude_vars=exclude_vars, exclude_years=(), only_pred=False)
+                                                        exclude_vars=exclude_vars, exclude_years=(), only_pred=False,
+                                                        use_full_extent=True)
     ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
                     forecast_years=(2019,))
 
