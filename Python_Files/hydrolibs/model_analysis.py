@@ -185,7 +185,7 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     min_forecast_yr = min(forecast_years)
     ax1.set_xlim(left=np.min(df1.YEAR) - 0.1, right=np.max(df1.YEAR) + 0.1)
     ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
-    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
+    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.12, 1),
                labels=['Actual GW', 'Predicted GW', 'Test Years', 'Forecast'])
     ax1.set_ylabel('Mean GW Pumping (mm)')
     ax1.set_xticks(df1.YEAR)

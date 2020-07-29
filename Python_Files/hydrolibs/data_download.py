@@ -12,7 +12,7 @@ from glob import glob
 
 def download_gee_data(year_list, start_month, end_month, aoi_shp_file, outdir):
     """
-    Download MOD16 and PRISM data
+    Download MOD16 and PRISM data. MOD16 has to be divided by 10 (line 38) as its original scale is 0.1 mm/8 days.
     :param year_list: List of years in %Y format
     :param start_month: Start month in %m format
     :param end_month: End month in %m format
@@ -35,7 +35,7 @@ def download_gee_data(year_list, start_month, end_month, aoi_shp_file, outdir):
             end_date = ee.Date.fromYMD(year, end_month + 1, 1)
         if end_month <= start_month:
             start_date = ee.Date.fromYMD(year - 1, start_month, 1)
-        mod16_total = mod16_collection.select('ET').filterDate(start_date, end_date).sum().toDouble()
+        mod16_total = mod16_collection.select('ET').filterDate(start_date, end_date).sum().divide(10).toDouble()
         prism_total = prism_collection.select('ppt').filterDate(start_date, end_date).sum().toDouble()
         mod16_url = mod16_total.getDownloadUrl({
             'scale': 1000,
@@ -138,7 +138,7 @@ def extract_data(zip_dir, out_dir, rename_extracted_files=False):
     """
     Extract data from zip file
     :param zip_dir: Input zip directory
-    :param out_dir: Output directory to write SSEBop images
+    :param out_dir: Output directory to write extracted files
     :param rename_extracted_files: Set True to rename extracted files according the original zip file name
     :return: None
     """
