@@ -855,17 +855,17 @@ def run_gw(build_individual_model=False):
     load_rf_model = True
     gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
                              use_gmds=False, build_ml_model=build_individual_model)
-    gw_az, az_df = run_gw_az(analyze_only=analyze_only, load_files=load_files, load_rf_model=False,
+    gw_az, az_df = run_gw_az(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
                              build_ml_model=build_individual_model)
     if not build_individual_model:
         final_gw_df = ks_df.append(az_df)
-        final_gw_df.to_csv('Final_DF.csv', index=False)
+        output_dir = '../Outputs/All_Data/'
+        final_gw_df.to_csv(output_dir + 'GW_DF_KS_AZ.csv', index=False)
         final_gw_df = final_gw_df.dropna(axis=0)
         drop_attrs = ('YEAR',)
         exclude_vars = ('ET',)
         pred_attr = 'GW'
         max_features = len(final_gw_df.columns.values.tolist()) - len(drop_attrs) - 1
-        output_dir = '../Outputs/All_Data/'
         gw = HydroML(None, None, output_dir, None, None, None, None)
         rf_model = gw.build_model(final_gw_df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=False, max_features=max_features, plot_graphs=False)
@@ -885,4 +885,4 @@ def run_gw(build_individual_model=False):
                         forecast_years=(2019,))
 
 
-run_gw(build_individual_model=True)
+run_gw(build_individual_model=False)
