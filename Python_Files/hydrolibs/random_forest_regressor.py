@@ -10,17 +10,17 @@ import os
 from glob import glob
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
 from collections import defaultdict
 from sklearn.inspection import plot_partial_dependence
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import permutation_importance
 from mpl_toolkits.mplot3d import axes3d
 from Python_Files.hydrolibs import rasterops as rops
+from Python_Files.hydrolibs import model_analysis as ma
 
 
 def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif', exclude_years=(), exclude_vars=(),
-                     make_year_col=True, ordering=False):
+                     make_year_col=True, ordering=False, remove_na=True):
     """
     Create dataframe from file list
     :param input_file_dir: Input directory where the file names begin with <Variable>_<Year>, e.g, ET_2015.tif
@@ -31,6 +31,7 @@ def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif',
     :param exclude_vars: Exclude these variables from the dataframe
     :param make_year_col: Make a dataframe column entry for year
     :param ordering: Set True to order dataframe column names
+    :param remove_na: Set False to disable NA removal
     :return: Pandas dataframe
     """
 
@@ -61,7 +62,8 @@ def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif',
         else:
             df = df.append(pd.DataFrame(data=raster_dict))
 
-    df = df.dropna(axis=0)
+    if remove_na:
+        df = df.dropna(axis=0)
     df = reindex_df(df, column_names=column_names, ordering=ordering)
     df.to_csv(out_df, index=False)
     return df
@@ -245,7 +247,7 @@ def create_pdplots(x_train, rf_model, outdir, plot_3d=False, descriptive_labels=
 
 def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=True, max_features=None, test_size=0.2,
                  pred_attr='GW', shuffle=True, plot_graphs=False, plot_3d=False, plot_dir=None, drop_attrs=(),
-                 test_case='', test_year=None, split_yearly=True, load_model=True):
+                 test_case='', test_year=None, split_yearly=True, load_model=True, calc_perm_imp=False):
     """
     Perform random forest regression
     :param input_df: Input pandas dataframe
@@ -266,6 +268,7 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
     #split_yearly_data
     :param split_yearly: Split train test data based on years
     :param load_model: Load an earlier pre-trained RF model
+    :param calc_perm_imp: Set True to get permutation importances on train and test data
     :return: Random forest model
     """
 
@@ -294,25 +297,23 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
     print('Predictor... ')
     y_pred = regressor.predict(x_test)
     feature_imp = " ".join(str(np.round(i, 2)) for i in regressor.feature_importances_)
-    permutation_imp_train = permutation_importance(regressor, x_train, y_train, n_repeats=10, random_state=random_state,
-                                                   n_jobs=-1)
-    permutation_imp_train = " ".join(str(np.round(i, 2)) for i in permutation_imp_train.importances_mean)
-    permutation_imp_test = permutation_importance(regressor, x_test, y_test, n_repeats=10, random_state=random_state,
-                                                  n_jobs=-1)
-    permutation_imp_test = " ".join(str(np.round(i, 2)) for i in permutation_imp_test.importances_mean)
+    permutation_imp_train, permutation_imp_test = None, None
+    if calc_perm_imp:
+        permutation_imp_train = permutation_importance(regressor, x_train, y_train, n_repeats=10,
+                                                       random_state=random_state, n_jobs=-1)
+        permutation_imp_train = " ".join(str(np.round(i, 2)) for i in permutation_imp_train.importances_mean)
+        permutation_imp_test = permutation_importance(regressor, x_test, y_test, n_repeats=10,
+                                                      random_state=random_state, n_jobs=-1)
+        permutation_imp_test = " ".join(str(np.round(i, 2)) for i in permutation_imp_test.importances_mean)
     train_score = np.round(regressor.score(x_train, y_train), 2)
     test_score = np.round(regressor.score(x_test, y_test), 2)
-    mae = metrics.mean_absolute_error(y_test, y_pred)
-    rmse = metrics.mean_squared_error(y_test, y_pred, squared=False)
-    normalized_mae = np.round(mae / np.mean(y_test), 2)
-    normalized_rmse = np.round(rmse / np.mean(y_test), 2)
-    mae = np.round(mae, 2)
-    rmse = np.round(rmse, 2)
+    r2_score, mae, rmse, nmae, nrmse = ma.get_error_stats(y_test, y_pred)
     oob_score = np.round(regressor.oob_score_, 2)
     df = {'Test': [test_case], 'N_Estimator': [n_estimators], 'MF': [max_features], 'F_IMP': [feature_imp],
-          'P_IMP_TRAIN': [permutation_imp_train], 'P_IMP_TEST': [permutation_imp_test], 'Train_Score': [train_score],
-          'Test_Score': [test_score], 'OOB_Score': [oob_score], 'MAE': [mae], 'RMSE': [rmse], 'NMAE': [normalized_mae],
-          'NRMSE': [normalized_rmse]}
+          'Train_Score': [train_score], 'Test_Score': [test_score], 'OOB_Score': [oob_score], 'R2': [r2_score],
+          'MAE': [mae], 'RMSE': [rmse], 'NMAE': [nmae], 'NRMSE': [nrmse]}
+    if calc_perm_imp:
+        df['P_IMP_TRAIN'], df['P_IMP_TEST'] = [permutation_imp_train], [permutation_imp_test]
     print('Model statistics:', df)
     df = pd.DataFrame(data=df)
     with open(out_dir + 'RF_Results.csv', 'a') as f:
@@ -372,7 +373,7 @@ def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=Non
         if not only_pred:
             for nan_pos in nan_pos_dict.values():
                 pred_arr[nan_pos] = actual_file.nodata
-        mae, rmse, r_squared, normalized_rmse, normalized_mae = (np.nan, ) * 5
+        mae, rmse, r2_score, nrmse, nmae = (np.nan, ) * 5
     else:
         if only_pred:
             actual_arr = input_df[pred_attr]
@@ -389,17 +390,11 @@ def create_pred_raster(rf_model, out_raster, actual_raster_dir, column_names=Non
         else:
             actual_values = actual_arr
             pred_values = pred_arr
-        mae = metrics.mean_absolute_error(actual_values, pred_values)
-        r_squared = np.round(metrics.r2_score(actual_values, pred_values), 2)
-        rmse = metrics.mean_squared_error(actual_values, pred_values, squared=False)
-        normalized_rmse = np.round(rmse / np.mean(actual_values), 2)
-        normalized_mae = np.round(mae / np.mean(actual_values), 2)
-        rmse = np.round(rmse, 2)
-        mae = np.round(mae, 2)
+        r2_score, mae, rmse, nmae, nrmse = ma.get_error_stats(actual_values, pred_values)
     if not only_pred:
         pred_arr = pred_arr.reshape(raster_shape)
         rops.write_raster(pred_arr, actual_file, transform=actual_file.transform, outfile_path=out_raster)
-    return mae, rmse, r_squared, normalized_rmse, normalized_mae
+    return mae, rmse, r2_score, nrmse, nmae
 
 
 def predict_rasters(rf_model, actual_raster_dir, out_dir, pred_years, column_names=None, drop_attrs=(), pred_attr='GW',

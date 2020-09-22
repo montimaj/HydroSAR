@@ -4,6 +4,7 @@
 import numpy as np
 import pandas as pd
 import os
+import seaborn
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sklearn.metrics as metrics
@@ -346,3 +347,61 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gmd_file=
         print(calculate_gmd_stats(ts_df[1], gmd_name_list, out_dir))
         ts_df = ts_df[0], ts_df[2]
         create_gmd_time_series_forecast_plot(ts_df, gmd_name_list=gmd_name_list)
+
+
+def generate_feature_box_plots(input_csv_file, year_col='YEAR', temporal_features=('ET', 'P'), pred_attr='GW',
+                               drop_attr=('GMD',)):
+    """
+    Generate box plots for all features
+    :param input_csv_file: Input CSV file path
+    :param year_col: Name of Year column
+    :param temporal_features: Temporal feature names
+    :param pred_attr: Prediction attribute name to be dropped from boxplot
+    :param drop_attr: Drop these attributes from the plots
+    :return: None
+    """
+
+    input_df = pd.read_csv(input_csv_file)
+    input_df = input_df.drop(columns=list(drop_attr))
+    feature_names = input_df.columns.values.tolist()
+    feature_names.remove(pred_attr)
+    for tf in temporal_features:
+        sub_df = input_df[[year_col, tf]]
+        fig, ax = plt.subplots(figsize=(12, 5))
+        seaborn.boxplot(x='YEAR', y=tf, data=sub_df, ax=ax)
+        plt.show()
+        feature_names.remove(tf)
+    feature_names.remove(year_col)
+    feature_names.remove('Crop')
+    sub_df = pd.melt(input_df.loc[input_df[year_col] == 2015][feature_names])
+    sub_df = sub_df.rename(columns={'variable': 'Land-Use Features', 'value': 'Land-Use Density'})
+    seaborn.boxplot(x='Land-Use Features', y='Land-Use Density', data=sub_df)
+    plt.show()
+    sub_df = pd.melt(input_df.loc[input_df[year_col] == 2015][['Crop']])
+    sub_df['variable'] = ''
+    sub_df = sub_df.rename(columns={'variable': 'Crop Coefficient', 'value': 'Value'})
+    seaborn.boxplot(x='Crop Coefficient', y='Value', data=sub_df)
+    plt.show()
+
+
+def get_error_stats(actual_values, pred_values, round_places=2):
+    """
+    Get R2, MAE, RMSE, NMAE (normalized MAE), and NRMSE (normalized RMSE)
+    :param actual_values: List of actual values
+    :param pred_values: List of predicted values
+    :param round_places: Number of decimal places to round at, default 2.
+    :return: Tuple containing R2, MAE, RMSE, NMAE, and NRMSE (rounded to 2 decimal places by default)
+    """
+
+    if isinstance(actual_values, pd.DataFrame):
+        actual_values = actual_values.iloc[:, 0].tolist()
+    if isinstance(pred_values, pd.DataFrame):
+        pred_values = pred_values.iloc[:, 0].tolist()
+    mae = metrics.mean_absolute_error(actual_values, pred_values)
+    r2_score = np.round(metrics.r2_score(actual_values, pred_values), round_places)
+    rmse = metrics.mean_squared_error(actual_values, pred_values, squared=False)
+    nrmse = np.round(rmse / np.mean(actual_values), round_places)
+    nmae = np.round(mae / np.mean(actual_values), round_places)
+    rmse = np.round(rmse, round_places)
+    mae = np.round(mae, round_places)
+    return r2_score, mae, rmse, nmae, nrmse
