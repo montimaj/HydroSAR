@@ -405,3 +405,16 @@ def get_error_stats(actual_values, pred_values, round_places=2):
     rmse = np.round(rmse, round_places)
     mae = np.round(mae, round_places)
     return r2_score, mae, rmse, nmae, nrmse
+
+
+def subsidence_analysis(input_dir):
+    """
+    Analyze subsidence and predicted GW rasters
+    :param input_dir: Input data directory
+    :return: None
+    """
+
+    subsidence_gw_dir = input_dir + 'Subsidence_GW/'
+    subsidence_dirs = glob(subsidence_gw_dir + '*')
+    print(subsidence_dirs)
+    # TODO: Create CSV files for each year

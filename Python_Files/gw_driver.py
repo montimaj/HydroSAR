@@ -77,7 +77,9 @@ class HydroML:
         self.ws_end_month = None
         self.ws_data_dir = None
         self.ws_data_reproj_dir = None
-        self.annual_subsidence_dir = None
+        self.converted_subsidence_dir = None
+        self.pred_out_dir = None
+        self.subsidence_pred_gw_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -359,30 +361,20 @@ class HydroML:
         else:
             print('Already reclassified')
 
-    def create_subsidence_rasters(self, pattern='*.tif', verbose=False, already_organized=False,
-                                  already_created=False):
+    def organize_subsidence_rasters(self, verbose=False, already_organized=False):
         """
-        Organize ADWR subsidence rasters and then create yearly subsidence rasters
-        :param pattern: File pattern
+        Organize ADWR subsidence rasters and then create resampled subsidence rasters
         :param verbose: Set True to get additional info
         :param already_organized: Set True to disable organizing subsidence rasters
-        :param already_created: Set True to disable land use raster generation
         :return: None
         """
 
-        converted_subsidence_dir = self.file_dir + 'Converted_Subsidence_Rasters/'
-        ref_raster = glob(self.input_ts_dir + 'P*.tif')[0]
+        self.converted_subsidence_dir = self.file_dir + 'Converted_Subsidence_Rasters/'
         if not already_organized:
             print('Organizing subsidence rasters...')
-            makedirs([converted_subsidence_dir])
-            rops.organize_subsidence_data(self.input_subsidence_dir, output_dir=converted_subsidence_dir,
-                                          ref_raster=ref_raster, gdal_path=self.gdal_path, verbose=verbose)
-        if not already_created:
-            print('Creating annual subsidence rasters...')
-            self.annual_subsidence_dir = self.file_dir + 'Annual_Subsidence_Rasters/'
-            makedirs([self.annual_subsidence_dir])
-            rops.create_annual_subsidence_rasters(converted_subsidence_dir, ref_raster=ref_raster,
-                                                  output_dir=self.annual_subsidence_dir, pattern=pattern)
+            makedirs([self.converted_subsidence_dir])
+            rops.organize_subsidence_data(self.input_subsidence_dir, output_dir=self.converted_subsidence_dir,
+                                          ref_raster=self.ref_raster, gdal_path=self.gdal_path, verbose=verbose)
         print('Organized and created subsidence rasters...')
 
     def reproject_rasters(self, pattern='*.tif', already_reprojected=False):
@@ -408,9 +400,6 @@ class HydroML:
                                    outdir=self.crop_coeff_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
-                if self.annual_subsidence_dir:
-                    rops.reproject_rasters(self.annual_subsidence_dir, ref_raster=self.ref_raster,
-                                           outdir=self.raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
                                        pattern=pattern, gdal_path=self.gdal_path)
                 rops.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.data_year_list,
@@ -649,16 +638,34 @@ class HydroML:
         """
 
         print('Predicting...')
-        pred_out_dir = make_proper_dir_name(self.output_dir + 'Predicted_Rasters')
-        makedirs([pred_out_dir])
+        self.pred_out_dir = make_proper_dir_name(self.output_dir + 'Predicted_Rasters')
+        makedirs([self.pred_out_dir])
         actual_raster_dir = self.rf_data_dir
         if use_full_extent:
             actual_raster_dir = self.pred_data_dir
-        rfr.predict_rasters(rf_model, pred_years=pred_years, drop_attrs=drop_attrs, out_dir=pred_out_dir,
+        rfr.predict_rasters(rf_model, pred_years=pred_years, drop_attrs=drop_attrs, out_dir=self.pred_out_dir,
                             actual_raster_dir=actual_raster_dir, pred_attr=pred_attr, only_pred=only_pred,
                             exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
                             ordering=ordering)
-        return actual_raster_dir, pred_out_dir
+        return actual_raster_dir, self.pred_out_dir
+
+    def create_subsidence_pred_gw_rasters(self, scale_to_cm=True, verbose=False, already_created=False):
+        """
+        Create total predicted GW withdrawal rasters based on subsidence years
+        :param scale_to_cm: Set False to disable scaling GW and subsidence data to cm, default GW is in mm and
+        subsidence is in m
+        :param verbose: Set True to get additional info
+        :param already_created: Set True to disable creating these rasters
+        :return: None
+        """
+
+        self.subsidence_pred_gw_dir = make_proper_dir_name(self.output_dir + 'Subsidence_Analysis')
+        if not already_created:
+            makedirs([self.subsidence_pred_gw_dir])
+            rops.create_subsidence_pred_gw_rasters(self.pred_out_dir, self.converted_subsidence_dir,
+                                                   self.subsidence_pred_gw_dir, scale_to_cm=scale_to_cm,
+                                                   verbose=verbose)
+        print('Subsidence and total predicted GW rasters created!')
 
 
 def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True, show_box_plots=False,
@@ -750,7 +757,7 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
     return gw, df
 
 
-def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml_model=True):
+def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml_model=True, subsidence_analysis=False):
     """
     Main function for running the project for Arizona, some variables require to be hardcoded
     :param analyze_only: Set True to just produce analysis results, all required files must be present
@@ -758,6 +765,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
     :param load_rf_model: Set True to load existing Random Forest model, needed only if analyze_only=False
     :param build_ml_model: Set False to disable model building. If True, watershed stress index rasters will be computed
     as it is a useful predictor in Arizona
+    :param subsidence_analysis: Set True to analyze total subsidence and total groundwater withdrawals in a
+    specified period, build_ml_model must be True
     :return: Returns HydroML object and Pandas dataframe if build_model=False, None otherwise
     """
 
@@ -776,6 +785,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
     gdal_path = 'C:/OSGeo4W64/'
     actual_gw_dir = file_dir + 'RF_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
+    subsidence_gw_dir = output_dir + 'Subsidence_Analysis/'
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
@@ -826,6 +836,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
         gw.update_crop_coeff_raster(already_updated=load_files)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
+            if subsidence_analysis:
+                gw.organize_subsidence_rasters(already_organized=load_files)
         gw.mask_rasters(already_masked=load_files)
         df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
                                  load_df=False, remove_na=remove_na)
@@ -833,30 +845,41 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
             max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
             rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                       load_model=load_rf_model, max_features=max_features, plot_graphs=False)
+            use_full_extent = False
+            if subsidence_analysis:
+                use_full_extent = True
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(),
-                                                            only_pred=False, use_full_extent=False)
+                                                            only_pred=False, use_full_extent=use_full_extent)
+            if subsidence_analysis:
+                gw.create_subsidence_pred_gw_rasters(already_created=False)
+
     if build_ml_model:
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
                         forecast_years=(2019,))
+        ma.subsidence_analysis(subsidence_gw_dir)
     return gw, df
 
 
-def run_gw(build_individual_model=False):
+def run_gw(build_individual_model=False, run_only_az=True):
     """
     Main caller function for Kansas and Arizona. This will build the ML model using both Kansas and Arizona data.
     :param build_individual_model: Set True to build individual models for Kansas and Arizona and analyze results.
+    :param run_only_az: Set False to run both Kansas and Arizona models. If True, build_individual_model must be True
     :return: None
     """
 
     analyze_only = False
     load_files = True
     load_rf_model = True
-    gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                             use_gmds=False, build_ml_model=build_individual_model)
+    subsidence_analysis = True
+    gw_ks, ks_df = None, None
+    if not run_only_az:
+        gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
+                                 use_gmds=False, build_ml_model=build_individual_model)
     gw_az, az_df = run_gw_az(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                             build_ml_model=build_individual_model)
+                             build_ml_model=build_individual_model, subsidence_analysis=subsidence_analysis)
     if not build_individual_model:
         final_gw_df = ks_df.append(az_df)
         output_dir = '../Outputs/All_Data/'
@@ -885,4 +908,4 @@ def run_gw(build_individual_model=False):
                         forecast_years=(2019,))
 
 
-run_gw(build_individual_model=False)
+run_gw(build_individual_model=True)
