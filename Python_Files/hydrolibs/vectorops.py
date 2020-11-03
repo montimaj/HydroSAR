@@ -190,10 +190,10 @@ def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_g
 
     num_cores = multiprocessing.cpu_count()
     print('Updating Well Registry shapefiles...\n')
-    Parallel(n_jobs=num_cores)(delayed(parallel_add_attribute_well_reg)(input_well_reg_file, input_gw_csv_file,
-                                                                        out_gw_shp_dir, fill_attr, filter_attr,
-                                                                        filter_attr_value, **kwargs)
-                               for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
+    Parallel(n_jobs=num_cores - 1)(delayed(parallel_add_attribute_well_reg)(input_well_reg_file, input_gw_csv_file,
+                                                                            out_gw_shp_dir, fill_attr, filter_attr,
+                                                                            filter_attr_value, **kwargs)
+                                   for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
 
 
 def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_dir, fill_attr='AF Pumped',

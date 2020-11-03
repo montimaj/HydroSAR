@@ -454,9 +454,8 @@ class HydroML:
 
         if not already_updated:
             print('Updating crop coefficient raster based on AGRI...')
-            agri_file = glob(self.land_use_dir_list[0] + '*_flt.tif')[0]
             crop_coeff_file = glob(self.crop_coeff_reproj_dir + pattern)[0]
-            rops.update_crop_coeff_raster(crop_coeff_file, agri_file)
+            rops.update_crop_coeff_raster(crop_coeff_file, self.reclass_reproj_file)
         print('Crop coefficients updated!')
 
     def create_water_stress_index_rasters(self, pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
@@ -757,12 +756,14 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
     return gw, df
 
 
-def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml_model=True, subsidence_analysis=False):
+def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=False, build_ml_model=True,
+              subsidence_analysis=False):
     """
     Main function for running the project for Arizona, some variables require to be hardcoded
     :param analyze_only: Set True to just produce analysis results, all required files must be present
     :param load_files: Set True to load existing files, needed only if analyze_only=False
     :param load_rf_model: Set True to load existing Random Forest model, needed only if analyze_only=False
+    :param load_df: Set True to load existing dataframe from CSV
     :param build_ml_model: Set False to disable model building. If True, watershed stress index rasters will be computed
     as it is a useful predictor in Arizona
     :param subsidence_analysis: Set True to analyze total subsidence and total groundwater withdrawals in a
@@ -839,11 +840,11 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
             if subsidence_analysis:
                 gw.organize_subsidence_rasters(already_organized=load_files)
         gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
-                                 load_df=False, remove_na=remove_na)
+        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(),
+                                 load_df=load_df, remove_na=remove_na)
         if build_ml_model:
             max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
-            rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
+            rf_model = gw.build_model(df, test_year=range(2015, 2020), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                       load_model=load_rf_model, max_features=max_features, plot_graphs=False)
             use_full_extent = False
             if subsidence_analysis:
@@ -853,11 +854,11 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, build_ml
                                                             exclude_vars=exclude_vars, exclude_years=(),
                                                             only_pred=False, use_full_extent=use_full_extent)
             if subsidence_analysis:
-                gw.create_subsidence_pred_gw_rasters(already_created=False)
+                gw.create_subsidence_pred_gw_rasters(already_created=load_files)
 
     if build_ml_model:
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
-                        forecast_years=(2019,))
+                        forecast_years=())
         ma.subsidence_analysis(subsidence_gw_dir)
     return gw, df
 
@@ -872,14 +873,16 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = True
-    subsidence_analysis = True
+    load_rf_model = False
+    load_df = False
+    subsidence_analysis = False
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                                 use_gmds=False, build_ml_model=build_individual_model)
+                                 use_gmds=False, build_ml_model=build_individual_model, load_df=load_df)
     gw_az, az_df = run_gw_az(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                             build_ml_model=build_individual_model, subsidence_analysis=subsidence_analysis)
+                             build_ml_model=build_individual_model, subsidence_analysis=subsidence_analysis,
+                             load_df=load_df)
     if not build_individual_model:
         final_gw_df = ks_df.append(az_df)
         output_dir = '../Outputs/All_Data/'
@@ -908,4 +911,4 @@ def run_gw(build_individual_model=False, run_only_az=True):
                         forecast_years=(2019,))
 
 
-run_gw(build_individual_model=True)
+run_gw(build_individual_model=True, run_only_az=True)

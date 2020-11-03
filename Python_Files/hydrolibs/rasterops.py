@@ -1043,16 +1043,16 @@ def create_crop_coeff_raster(input_cdl_file, output_file):
     write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
 
 
-def update_crop_coeff_raster(input_crop_coeff_raster, agri_raster):
+def update_crop_coeff_raster(input_crop_coeff_raster, cdl_reclass_raster):
     """
     Update crop coefficient raster based on AGRI raster
     :param input_crop_coeff_raster: Input crop coefficient raster file path
-    :param agri_raster: Input AGRI raster file path
+    :param cdl_reclass_raster: Input CDL Reclassified raster file path
     :return: None
     """
 
     crop_coeff_arr, crop_coeff_file = read_raster_as_arr(input_crop_coeff_raster)
-    agri_arr = read_raster_as_arr(agri_raster, get_file=False)
-    crop_coeff_arr[np.logical_and(crop_coeff_arr == 1., agri_arr < 0.1)] = 0.
+    cdl_reclass_arr = read_raster_as_arr(cdl_reclass_raster, get_file=False)
+    crop_coeff_arr[np.logical_and(~np.isnan(cdl_reclass_arr), cdl_reclass_arr != 1)] = 0.
     write_raster(crop_coeff_arr, crop_coeff_file, transform=crop_coeff_file.transform,
                  outfile_path=input_crop_coeff_raster)
