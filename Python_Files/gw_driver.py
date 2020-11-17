@@ -361,9 +361,10 @@ class HydroML:
         else:
             print('Already reclassified')
 
-    def organize_subsidence_rasters(self, verbose=False, already_organized=False):
+    def organize_subsidence_rasters(self, decorrelated_value=-10000, verbose=False, already_organized=False):
         """
         Organize ADWR subsidence rasters and then create resampled subsidence rasters
+        :param decorrelated_value: Decorrelated pixel value for subsidence rasters, these would be set to no data
         :param verbose: Set True to get additional info
         :param already_organized: Set True to disable organizing subsidence rasters
         :return: None
@@ -374,7 +375,8 @@ class HydroML:
             print('Organizing subsidence rasters...')
             makedirs([self.converted_subsidence_dir])
             rops.organize_subsidence_data(self.input_subsidence_dir, output_dir=self.converted_subsidence_dir,
-                                          ref_raster=self.ref_raster, gdal_path=self.gdal_path, verbose=verbose)
+                                          ref_raster=self.ref_raster, gdal_path=self.gdal_path,
+                                          decorrelated_value=decorrelated_value, verbose=verbose)
         print('Organized and created subsidence rasters...')
 
     def reproject_rasters(self, pattern='*.tif', already_reprojected=False):
@@ -873,9 +875,9 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = False
-    load_df = False
-    subsidence_analysis = False
+    load_rf_model = True
+    load_df = True
+    subsidence_analysis = True
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,

@@ -51,8 +51,7 @@ def read_raster_as_arr(raster_file, band=1, get_file=True, rasterio_obj=False, c
     return raster_arr
 
 
-def write_raster(raster_data, raster_file, transform, outfile_path, no_data_value=NO_DATA_VALUE,
-                 ref_file=None):
+def write_raster(raster_data, raster_file, transform, outfile_path, no_data_value=NO_DATA_VALUE, ref_file=None):
     """
     Write raster file in GeoTIFF format
     :param raster_data: Raster data to be written
@@ -912,7 +911,8 @@ def generate_cummulative_ssebop(ssebop_dir, year_list, start_month, end_month, o
             return
 
 
-def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path, verbose=False):
+def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path, decorrelated_value=-10000,
+                             verbose=False):
     """
     Resample, reproject, and organize subsidence rasters which are originally in ADF format as per ADWR specifications.
     This module is specifically meant for Arizona.
@@ -921,6 +921,7 @@ def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_
     :param ref_raster: Reference raster file to consider while reprojecting
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param decorrelated_value: Decorrelated pixel value for subsidence rasters, these would be set to no data
     :param verbose: Set True to print system call info
     :return: None
     """
@@ -928,11 +929,12 @@ def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_
     subsidence_dirs = glob(input_subsidence_dir + '*')
     num_cores = multiprocessing.cpu_count()
     Parallel(n_jobs=num_cores)(delayed(parallel_organize_subsidence_data)(subsidence_dir, output_dir, ref_raster,
-                                                                          gdal_path, verbose)
+                                                                          gdal_path, decorrelated_value, verbose)
                                for subsidence_dir in subsidence_dirs)
 
 
-def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path, verbose=False):
+def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_path,
+                                      decorrelated_value=-10000, verbose=False):
     """
     Parallely organize subsidence rasters, should be called from #organize_subsidence_data(...)
     :param input_subsidence_dir: Input subsidence directory
@@ -940,6 +942,7 @@ def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_rast
     :param ref_raster: Reference raster file to consider while reprojecting
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param decorrelated_value: Decorrelated pixel value for subsidence rasters, these would be set to no data
     :param verbose: Set True to print system call info
     :return: None
     """
@@ -957,12 +960,21 @@ def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_rast
                     subsidence_dir = make_proper_dir_name(subsidence_dir)
                     input_subsidence_file = subsidence_dir + 'w001001.adf'
                     yearly_output_dir = make_proper_dir_name(output_dir + year)
-                    makedirs([yearly_output_dir])
-                    output_subsidence_file = yearly_output_dir + input_subsidence_dir[
-                                                          input_subsidence_dir[:-1].rfind(os.sep) + 1:
-                                                          input_subsidence_dir.rfind(os.sep)] + '_' + year + '.tif'
-                    reproject_raster(input_subsidence_file, from_raster=ref_raster, outfile_path=output_subsidence_file,
-                                     gdal_path=gdal_path, verbose=verbose)
+                    yearly_corrected_subsidence_dir = make_proper_dir_name(
+                                                      output_dir[:output_dir[:-1].rfind('/') + 1] +
+                                                      'Corrected_Subsidence_Rasters/' + year)
+                    makedirs([yearly_output_dir, yearly_corrected_subsidence_dir])
+                    subsidence_suffix = input_subsidence_dir[input_subsidence_dir[:-1].rfind(os.sep) + 1:
+                                                             input_subsidence_dir.rfind(os.sep)] + '_' + year + '.tif'
+                    corrected_subsidence_file = yearly_corrected_subsidence_dir + subsidence_suffix
+                    input_subsidence_arr, subsidence_file = read_raster_as_arr(input_subsidence_file)
+                    input_subsidence_arr[input_subsidence_arr == decorrelated_value] = np.nan
+                    input_subsidence_arr[np.isnan(input_subsidence_arr)] = NO_DATA_VALUE
+                    write_raster(input_subsidence_arr, subsidence_file, transform=subsidence_file.transform,
+                                 outfile_path=corrected_subsidence_file)
+                    output_subsidence_file = yearly_output_dir + subsidence_suffix
+                    reproject_raster(corrected_subsidence_file, from_raster=ref_raster,
+                                     outfile_path=output_subsidence_file, gdal_path=gdal_path, verbose=verbose)
 
 
 def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, output_dir, scale_to_cm=True,
@@ -979,9 +991,9 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, o
     """
 
     subsidence_dirs = glob(input_subsidence_dir + '*')
-    sf_gw, sf_subsidence = 10, 100
+    sf_gw, sf_subsidence, max_subsidence = 10, 100, 100
     if not scale_to_cm:
-        sf_gw, sf_subsidence = 1, 1
+        sf_gw, sf_subsidence, max_subsidence = 1, 1, 1
     for subsidence_dir in subsidence_dirs:
         sep_pos = subsidence_dir.rfind('_')
         start_year, end_year = subsidence_dir[sep_pos - 4: sep_pos], subsidence_dir[sep_pos + 1: sep_pos + 5]
@@ -998,23 +1010,36 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, o
                 total_pred_raster += read_raster_as_arr(pred_raster_file, get_file=False) / sf_gw
         if verbose:
             print('\n')
-        total_pred_raster[np.isnan(total_pred_raster)] = NO_DATA_VALUE
+        tpgw_nan_pos = np.isnan(total_pred_raster)
+        total_pred_raster[tpgw_nan_pos] = NO_DATA_VALUE
+        total_subsidence_raster = np.zeros_like(total_pred_raster)
+        total_subsidence_raster[tpgw_nan_pos] = np.nan
         tpgw_dir = make_proper_dir_name(output_dir + 'TPGW')
         makedirs([tpgw_dir])
         out_raster = tpgw_dir + 'TPGW_' + start_year + '_' + end_year + '.tif'
         write_raster(total_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
         subsidence_rasters = glob(subsidence_dir + '/*.tif')
+        subsidence_gw_dir = make_proper_dir_name(output_dir + 'Subsidence_GW/' + start_year + '_' + end_year)
+        makedirs([subsidence_gw_dir])
         for subsidence_raster in subsidence_rasters:
             subsidence_raster_name = subsidence_raster[subsidence_raster.rfind(os.sep) + 1:]
             subsidence_area = subsidence_raster_name[: subsidence_raster_name.find('_')]
-            subsidence_gw_dir = make_proper_dir_name(output_dir + 'Subsidence_GW/' + start_year + '_' + end_year)
-            makedirs([subsidence_gw_dir])
             subsidence_arr, subsidence_file = read_raster_as_arr(subsidence_raster)
-            total_pred_raster[np.isnan(subsidence_arr)] = NO_DATA_VALUE
+            subsidence_arr *= sf_subsidence
+            subsidence_nan_pos = np.isnan(subsidence_arr)
+            s_arr = np.copy(subsidence_arr)
+            s_arr[subsidence_nan_pos] = 0
+            total_subsidence_raster += s_arr
+            total_pred_raster[subsidence_nan_pos] = NO_DATA_VALUE
+            subsidence_arr[subsidence_nan_pos] = NO_DATA_VALUE
             out_raster = subsidence_gw_dir + subsidence_area + '_TPGW_' + start_year + '_' + end_year + '.tif'
             write_raster(total_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
-            write_raster(subsidence_arr * sf_subsidence, subsidence_file, transform=subsidence_file.transform,
+            write_raster(subsidence_arr, subsidence_file, transform=subsidence_file.transform,
                          outfile_path=subsidence_gw_dir + subsidence_raster_name)
+        out_total_subsidence_raster = subsidence_gw_dir + 'TS_' + start_year + '_' + end_year + '.tif'
+        total_subsidence_raster[tpgw_nan_pos] = NO_DATA_VALUE
+        write_raster(total_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform,
+                     outfile_path=out_total_subsidence_raster)
 
 
 def create_crop_coeff_raster(input_cdl_file, output_file):
