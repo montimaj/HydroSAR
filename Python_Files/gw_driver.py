@@ -842,11 +842,11 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
             if subsidence_analysis:
                 gw.organize_subsidence_rasters(already_organized=load_files)
         gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(),
+        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2019,),
                                  load_df=load_df, remove_na=remove_na)
         if build_ml_model:
             max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
-            rf_model = gw.build_model(df, test_year=range(2015, 2020), drop_attrs=drop_attrs, pred_attr=pred_attr,
+            rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                       load_model=load_rf_model, max_features=max_features, plot_graphs=False)
             use_full_extent = False
             if subsidence_analysis:
@@ -860,7 +860,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
 
     if build_ml_model:
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
-                        forecast_years=())
+                        forecast_years=(2019,))
         ma.subsidence_analysis(subsidence_gw_dir)
     return gw, df
 
@@ -875,9 +875,9 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = True
-    load_df = True
-    subsidence_analysis = True
+    load_rf_model = False
+    load_df = False
+    subsidence_analysis = False
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
