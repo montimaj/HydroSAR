@@ -199,7 +199,8 @@ def create_pdplots(x_train, rf_model, outdir, plot_3d=False, descriptive_labels=
 
     print('Plotting...')
     feature_names = x_train.columns.values.tolist()
-    plot_labels = {'AGRI': 'AGRI', 'URBAN': 'URBAN', 'SW': 'SW', 'ET': 'ET (mm)', 'P': 'P (mm)'}
+    plot_labels = {'AGRI': 'AGRI', 'URBAN': 'URBAN', 'SW': 'SW', 'SSEBop': 'ET (mm)', 'P': 'P (mm)', 'Crop': 'CC',
+                   'WS_PA': 'WS_PA', 'WS_PA_EA': 'WS_PA_EA'}
     if descriptive_labels:
         plot_labels = {'AGRI': 'Agriculture density', 'URBAN': 'Urban density', 'SW': 'Surface water density',
                        'ET': 'Evapotranspiration (mm)', 'P': 'Precipitation (mm)'}

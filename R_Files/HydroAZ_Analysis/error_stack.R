@@ -3,6 +3,7 @@ library(rgdal)
 library(colorRamps)
 library(rasterVis)
 library(viridisLite)
+library(RColorBrewer)
 
 err.raster.list <- list()
 pred.raster.list <- list()
@@ -26,6 +27,8 @@ pred.raster.stack <- stack(pred.raster.list)
 actual.raster.stack <- stack(actual.raster.list)
 
 err.mean.raster <- mean(err.raster.stack)
+actual.mean.raster <- mean(actual.raster.stack)
+pred.mean.raster <- mean(pred.raster.stack)
 
 min_value_actual  <- round(min(minValue(actual.raster.stack)))
 min_value_pred  <- round(min(minValue(pred.raster.stack)))
@@ -35,28 +38,49 @@ max_value_actual <- round(max(maxValue(actual.raster.stack)))
 max_value_pred <- round(max(maxValue(pred.raster.stack)))
 max_value <- max(max_value_actual, max_value_pred)
 max_value <- ceiling(max_value / 100) * 100
-breaks <- seq(min_value, max_value, by=200)
-col <- rev(terrain.colors(length(breaks) - 1))
+breaks <- seq(min_value, max_value, by=300)
+col <- topo.colors(length(breaks) - 1)
+col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
 plot_ext <- extent(-114, -109, 31, 35)
-plot(actual.raster.list[[1]], ylab='Longitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-plot(pred.raster.list[[1]], legend.args=list(text='Predicted GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
+plot(actual.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
+plot(pred.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:35))
 axis(side=1, at=c(-114:-109))
 min_value_error  <- round(min(minValue(err.raster.stack)))
 max_value_error <- round(max(maxValue(err.raster.stack)))
 min_value_error <- floor(min_value_error / 100) * 100
 max_value_error <- ceiling(max_value_error / 100) * 100
-breaks_error <- seq(min_value_error, max_value_error, by=150)
-col_error <- rev(matlab.like2(length(breaks_error) - 1))
-plot(err.raster.list[[1]], legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 0.8), breaks=breaks_error, zlim=c(min_value_error, max_value_error), col=col_error, box=F, axes=F)
+breaks_error <- seq(min_value_error, max_value_error, by=300)
+# col_error <- matlab.like2(length(breaks_error) - 1)
+col_error <- brewer.pal(n=length(breaks_error) - 1, name='Reds')
+plot(err.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 0.8), breaks=breaks_error, zlim=c(min_value_error, max_value_error), col=col_error, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
 
 
+min_value  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
+max_value <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
+max_value <- ceiling(max_value / 100) * 100
+breaks <- seq(min_value, max_value, by=300)
+col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
+plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.5), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
+plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.5), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
 
-plot(err.mean.raster, col = matlab.like2(255), ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
-     legend.args=list(text='Error (mm)', side = 2))
-axis(side=2, at=c(37, 38, 39, 40))
+min_value_error  <- round(minValue(err.mean.raster))
+max_value_error  <- round(maxValue(err.mean.raster))
+min_value_error <- floor(min_value_error / 100) * 100
+max_value_error <- ceiling(max_value_error / 100) * 100
+breaks_error <- seq(min_value_error, max_value_error, by=200)
+col_error <- brewer.pal(n=length(breaks_error) - 1, name='Reds')
+
+plot(err.mean.raster, col = col_error, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
+     legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 0.8), ext=plot_ext, box=F, axes=F)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
 err.df <- as.data.frame(err.mean.raster, na.rm = T)
 err <- err.df$layer
 err.mean <- mean(err)
@@ -68,6 +92,11 @@ hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals')
 x <- seq(min(std.err.df$STD.ERR), max(std.err.df$STD.ERR), length.out=length(std.err.df$STD.ERR))
 dist <- dnorm(x, mean(std.err.df$STD.ERR), sd(std.err.df$STD.ERR))
 lines(x, dist, col = 'red')
+
+plot(pred.mean.raster, actual.mean.raster, xlab="Mean Predicted GW Pumping (mm)", ylab="Mean Actual GW Pumping (mm)")
+legend(0, 1500, bty = 'n', legend = c("1:1 relationship"),
+       col = c("red"), lty = 1, cex = 0.8)
+abline(a=0, b=1, col='red')
 
 pred.raster.df <- as.data.frame(mean(pred.raster.stack),na.rm=T)
 names(pred.raster.df) <- c('pred')

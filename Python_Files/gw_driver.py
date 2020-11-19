@@ -877,7 +877,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
     load_files = True
     load_rf_model = False
     load_df = False
-    subsidence_analysis = False
+    subsidence_analysis = True
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
