@@ -669,6 +669,10 @@ class HydroML:
         print('Subsidence and total predicted GW rasters created!')
 
 
+    # def postprocess_prediction_rasters(self, ):
+
+
+
 def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True, show_box_plots=False,
               load_df=False, show_train_test_box_plots=False, build_ml_model=True):
     """
@@ -877,7 +881,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
     load_files = True
     load_rf_model = False
     load_df = False
-    subsidence_analysis = True
+    subsidence_analysis = False
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,

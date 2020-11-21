@@ -43,44 +43,55 @@ col <- topo.colors(length(breaks) - 1)
 col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
 plot_ext <- extent(-114, -109, 31, 35)
-plot(actual.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-plot(pred.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm)', side = 2, font = 0.5, cex = 0.7), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
+
 min_value_error  <- round(min(minValue(err.raster.stack)))
 max_value_error <- round(max(maxValue(err.raster.stack)))
 min_value_error <- floor(min_value_error / 100) * 100
 max_value_error <- ceiling(max_value_error / 100) * 100
 breaks_error <- seq(min_value_error, max_value_error, by=300)
-# col_error <- matlab.like2(length(breaks_error) - 1)
-col_error <- brewer.pal(n=length(breaks_error) - 1, name='Reds')
-plot(err.raster.list[[8]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 0.8), breaks=breaks_error, zlim=c(min_value_error, max_value_error), col=col_error, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
-
-
-min_value  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
-max_value <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
-max_value <- ceiling(max_value / 100) * 100
-breaks <- seq(min_value, max_value, by=300)
-col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
-
-plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.5), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.5), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
-
-min_value_error  <- round(minValue(err.mean.raster))
-max_value_error  <- round(maxValue(err.mean.raster))
-min_value_error <- floor(min_value_error / 100) * 100
-max_value_error <- ceiling(max_value_error / 100) * 100
-breaks_error <- seq(min_value_error, max_value_error, by=200)
 col_error <- brewer.pal(n=length(breaks_error) - 1, name='Reds')
 
-plot(err.mean.raster, col = col_error, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
-     legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 0.8), ext=plot_ext, box=F, axes=F)
+n <- 8
+plot(actual.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:35))
 axis(side=1, at=c(-114:-109))
+
+plot(pred.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
+
+plot(err.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks_error, zlim=c(min_value_error, max_value_error), col=col_error, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
+
+
+min_value_mean  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
+max_value_mean <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
+max_value_mean <- ceiling(max_value_mean / 100) * 100
+breaks_mean <- seq(min_value_mean, max_value_mean, by=300)
+col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
+
+plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.8), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
+plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.8), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
+
+min_value_mean_error  <- round(minValue(err.mean.raster))
+max_value_mean_error  <- round(maxValue(err.mean.raster))
+min_value_mean_error <- floor(min_value_mean_error / 100) * 100
+max_value_mean_error <- ceiling(max_value_mean_error / 100) * 100
+breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=200)
+col_error_mean <- brewer.pal(n=length(breaks_error_mean) - 1, name='Reds')
+
+plot(err.mean.raster, col = col_error_mean, breaks=breaks_error_mean, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
+     legend.args=list(text='Mean Error (mm)', side = 2, font = 0.5, cex = 1), ext=plot_ext, box=F, axes=F)
+axis(side=2, at=c(31:35))
+axis(side=1, at=c(-114:-109))
+
+
+
+
+
 err.df <- as.data.frame(err.mean.raster, na.rm = T)
 err <- err.df$layer
 err.mean <- mean(err)

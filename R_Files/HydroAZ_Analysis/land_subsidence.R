@@ -75,5 +75,8 @@ ls1.df$ls <- abs(ls1.df$ls)
 ls2.df$ls <- abs(ls2.df$ls)
 ls.df <- rbind(ls1.df, ls2.df)
 
-plot(tpgw.df$tpgw, ls.df$ls, log='xy')
+plot(tpgw.df$tpgw, ls.df$ls)
 cor(tpgw.df$tpgw, ls.df$ls)
+m <- lm(ls.df$ls ~ tpgw.df$tpgw)
+summary(m)
+
