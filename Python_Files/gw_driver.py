@@ -669,10 +669,6 @@ class HydroML:
         print('Subsidence and total predicted GW rasters created!')
 
 
-    # def postprocess_prediction_rasters(self, ):
-
-
-
 def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True, show_box_plots=False,
               load_df=False, show_train_test_box_plots=False, build_ml_model=True):
     """
@@ -735,7 +731,6 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files)
-        gw.update_crop_coeff_raster(already_updated=load_files)
         gw.mask_rasters(already_masked=load_files)
         remove_na = True
         if not build_ml_model:
@@ -840,7 +835,6 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
-        gw.update_crop_coeff_raster(already_updated=load_files)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
@@ -881,7 +875,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
     load_files = True
     load_rf_model = False
     load_df = False
-    subsidence_analysis = False
+    subsidence_analysis = True
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,

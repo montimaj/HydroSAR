@@ -16,14 +16,32 @@ ls_raster1 <- projectRaster(ls_raster1, crs = wgs84, method = "ngb")
 tpgw_raster2 <- projectRaster(tpgw_raster2, crs = wgs84, method = "ngb")
 ls_raster2 <- projectRaster(ls_raster2, crs = wgs84, method = "ngb")
 
+
+tpgw_raster1 <- tpgw_raster1 / 9
+tpgw_raster2 <- tpgw_raster2 / 9
+ls_raster1 <- ls_raster1 / 9
+ls_raster2 <- ls_raster2 / 9
+
 min_value  <- round(min(minValue(tpgw_raster1), minValue(tpgw_raster2)))
 max_value <- round(max(maxValue(tpgw_raster1), maxValue(tpgw_raster2)))
 max_value <- ceiling(max_value / 100) * 100
-breaks <- seq(min_value, max_value, by=200)
-col <- rev(brewer.pal(n=length(breaks), name='RdYlBu'))
+breaks <- seq(min_value, max_value, by=10)
+col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
 
-plot_ext <- extent(-115, -108.9, 31.8, 37.5)
+col <- rev(brewer.pal(n=11, name='RdYlBu'))
+plot_ext <- extent(-115, -108.9, 31.98, 37.5)
+plot(tpgw_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
+
+col <- rev(brewer.pal(n=9, name='Reds'))
+plot(ls_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Land Subsidence (cm)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
+
+
+plot_ext <- extent(-115, -108.9, 31.98, 37.5)
 plot(tpgw_raster1, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 plot(tpgw_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:37))
@@ -37,6 +55,8 @@ plot(ls_raster1, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.arg
 plot(ls_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Land Subsidence (cm)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:37))
 axis(side=1, at=c(-115:-109))
+
+
 
 tpgw1.df <- as.data.frame(tpgw_raster1, na.rm=T)
 ls1.df <- as.data.frame(ls_raster1, na.rm=T)
