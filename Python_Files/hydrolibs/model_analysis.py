@@ -384,12 +384,13 @@ def generate_feature_box_plots(input_csv_file, year_col='YEAR', temporal_feature
     plt.show()
 
 
-def get_error_stats(actual_values, pred_values, round_places=2):
+def get_error_stats(actual_values, pred_values, round_places=2, normalize_metric='mean'):
     """
     Get R2, MAE, RMSE, NMAE (normalized MAE), and NRMSE (normalized RMSE)
     :param actual_values: List of actual values
     :param pred_values: List of predicted values
     :param round_places: Number of decimal places to round at, default 2.
+    :param normalize_metric: Change to 'sd' to normalize MAE and RMSE by standard deviation
     :return: Tuple containing R2, MAE, RMSE, NMAE, and NRMSE (rounded to 2 decimal places by default)
     """
 
@@ -400,8 +401,11 @@ def get_error_stats(actual_values, pred_values, round_places=2):
     mae = metrics.mean_absolute_error(actual_values, pred_values)
     r2_score = np.round(metrics.r2_score(actual_values, pred_values), round_places)
     rmse = metrics.mean_squared_error(actual_values, pred_values, squared=False)
-    nrmse = np.round(rmse / np.mean(actual_values), round_places)
-    nmae = np.round(mae / np.mean(actual_values), round_places)
+    normalization_var = np.var(actual_values) ** 0.5
+    if normalize_metric == 'mean':
+        normalization_var = np.mean(actual_values)
+    nrmse = np.round(rmse / normalization_var, round_places)
+    nmae = np.round(mae / normalization_var, round_places)
     rmse = np.round(rmse, round_places)
     mae = np.round(mae, round_places)
     return r2_score, mae, rmse, nmae, nrmse

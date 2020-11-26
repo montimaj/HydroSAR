@@ -2,8 +2,8 @@ library(raster)
 library(colorRamps)
 library(RColorBrewer)
 
-tpgw_raster1 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept/Subsidence_Analysis/TPGW/TPGW_2004_2010.tif')
-ls_raster1 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept/Subsidence_Analysis/Subsidence_GW/2004_2010/TS_2004_2010.tif')
+tpgw_raster1 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept_New/Subsidence_Analysis/TPGW/TPGW_2004_2010.tif')
+ls_raster1 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept_New/Subsidence_Analysis/Subsidence_GW/2004_2010/TS_2004_2010.tif')
 
 tpgw_raster2 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept/Subsidence_Analysis/TPGW/TPGW_2010_2018.tif')
 ls_raster2 <- raster('C:/Users/sayan/PycharmProjects/HydroSAR/Outputs/Output_AZ_Apr_Sept/Subsidence_Analysis/Subsidence_GW/2010_2018/TS_2010_2018.tif')
@@ -30,18 +30,18 @@ col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
 
 col <- rev(brewer.pal(n=11, name='RdYlBu'))
-plot_ext <- extent(-115, -108.9, 31.98, 37.5)
-plot(tpgw_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
+plot_ext <- extent(-114.6, -108.9, 31, 37.5)
+plot(tpgw_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted Mean GW Pumping (cm/yr)', side = 2, font = 0.5, cex = 0.9), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:37))
 axis(side=1, at=c(-115:-109))
 
-col <- rev(brewer.pal(n=9, name='Reds'))
-plot(ls_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Land Subsidence (cm)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
+col <- rev(brewer.pal(n=7, name='Reds'))
+plot(ls_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Mean Land Subsidence (cm/yr)', side = 2, font = 0.5, cex = 1), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:37))
 axis(side=1, at=c(-115:-109))
 
 
-plot_ext <- extent(-115, -108.9, 31.98, 37.5)
+plot_ext <- extent(-115, -108.9, 31, 37.5)
 plot(tpgw_raster1, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 plot(tpgw_raster2, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (cm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
 axis(side=2, at=c(31:37))

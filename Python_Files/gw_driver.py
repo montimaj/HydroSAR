@@ -56,6 +56,7 @@ class HydroML:
         self.actual_gw_dir = None
         self.ref_raster = None
         self.raster_reproj_dir = None
+        self.well_reg_raster_file = None
         self.crop_coeff_dir = None
         self.crop_coeff_reproj_dir = None
         self.crop_coeff_mask_dir = None
@@ -161,7 +162,8 @@ class HydroML:
         print('Data for WS metric downloaded...')
 
     def preprocess_gw_csv(self, input_gw_csv_dir, fill_attr='AF Pumped', filter_attr=None,
-                          filter_attr_value='OUTSIDE OF AMA OR INA', already_preprocessed=False, **kwargs):
+                          filter_attr_value='OUTSIDE OF AMA OR INA', use_only_ama_ina=False, already_preprocessed=False,
+                          **kwargs):
         """
         Preprocess the well registry file to add GW pumping from each CSV file. That is, add an attribute present in the
         GW csv file to the Well Registry shape files (yearwise) based on matching ids given in kwargs.
@@ -173,6 +175,7 @@ class HydroML:
         :param fill_attr: Attribute present in the CSV file to add to Well Registry.
         :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
         :param filter_attr_value: Value for filter_attr
+        :param use_only_ama_ina: Set True to use only AMA/INA for model training
         :param already_preprocessed: Set True to disable preprocessing
         :return: None
         """
@@ -182,7 +185,8 @@ class HydroML:
             vops.add_attribute_well_reg_multiple(input_well_reg_file=self.input_gw_boundary_file,
                                                  input_gw_csv_dir=input_gw_csv_dir, out_gw_shp_dir=self.output_shp_dir,
                                                  fill_attr=fill_attr, filter_attr=filter_attr,
-                                                 filter_attr_value=filter_attr_value, **kwargs)
+                                                 filter_attr_value=filter_attr_value, use_only_ama_ina=use_only_ama_ina,
+                                                 **kwargs)
 
     def extract_shp_from_gdb(self, input_gdb_dir, year_list, attr_name='AF_USED', already_extracted=False):
         """
@@ -260,10 +264,9 @@ class HydroML:
             print('GW Shapefiles already clipped')
         self.output_shp_dir = clip_shp_dir
 
-    def crop_gw_rasters(self, raster_mask=None, ext_mask=True, use_ama_ina=False, already_cropped=False):
+    def crop_gw_rasters(self, ext_mask=True, use_ama_ina=False, already_cropped=False):
         """
         Crop GW rasters based on a mask, should be called after GW rasters have been created.
-        :param raster_mask: Raster mask (shapefile) for cropping raster, required only if crop_rasters=True
         :param ext_mask: Set True to crop by cutline, if shapefile consists of multiple polygons, then this won't
         work and appropriate AMA/INA should be set
         :param use_ama_ina: Use AMA/INA shapefile for cropping (Set True for Arizona).
@@ -275,8 +278,7 @@ class HydroML:
         if not already_cropped:
             makedirs([cropped_dir])
             multi_poly = False
-            if not raster_mask:
-                raster_mask = self.input_state_reproj_file
+            raster_mask = self.input_state_reproj_file
             if use_ama_ina:
                 raster_mask = self.input_ama_ina_reproj_file
                 multi_poly = True
@@ -285,6 +287,29 @@ class HydroML:
         else:
             print('GW rasters already cropped')
         self.final_gw_dir = cropped_dir
+        if not use_ama_ina:
+            self.final_gw_dir = make_proper_dir_name(cropped_dir + 'Well_Fixed')
+            makedirs([self.final_gw_dir])
+            rops.fix_gw_raster_values(cropped_dir, outdir=self.final_gw_dir, fix_only_negative=True)
+            self.actual_gw_dir = cropped_dir
+
+    def create_well_registry_raster(self, xres=5000., yres=5000., already_created=False):
+        """
+        Create well registry raster for Arizona
+        :param xres: X-Resolution (map unit)
+        :param yres: Y-Resolution (map unit)
+        :param already_created: Set False to re-compute GW pumping rasters
+        :return: None
+        """
+
+        well_reg_dir = make_proper_dir_name(self.output_dir + 'Well_Reg_Rasters')
+        if not already_created:
+            print('Creating well registry raster...')
+            makedirs([well_reg_dir])
+            self.well_reg_raster_file = well_reg_dir + 'well_reg.tif'
+            vops.shp2raster(self.input_gw_boundary_file, self.well_reg_raster_file, xres=xres, yres=yres, smoothing=0,
+                            burn_value=1.0, gdal_path=self.gdal_path, gridding=False)
+        print('Well registry raster created...')
 
     def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
                           convert_units=True, already_created=True):
@@ -310,7 +335,7 @@ class HydroML:
                               gridding=False)
             if convert_units:
                 max_gw *= xres * yres / (1.233 * 1e+6)
-            rops.fix_large_values(self.output_gw_raster_dir, max_threshold=max_gw, outdir=fixed_dir)
+            rops.fix_gw_raster_values(self.output_gw_raster_dir, max_threshold=max_gw, outdir=fixed_dir)
             if convert_units:
                 print('Changing GW units from acreft to mm')
                 makedirs([converted_dir])
@@ -668,6 +693,24 @@ class HydroML:
                                                    verbose=verbose)
         print('Subsidence and total predicted GW rasters created!')
 
+    def crop_final_gw_rasters(self, actual_gw_dir, pred_gw_dir, already_cropped=False):
+        """
+        Crop actual and predicted GW rasters based on the Arizona AMA/INA mask, should be called after
+        predicted GW rasters have been created.
+        :param actual_gw_dir: Actual GW raster directory
+        :param pred_gw_dir: Predicted GW raster directory
+        :param already_cropped: Set True to disable cropping
+        :return: Actual and Predicted cropped GW directories a tuple
+        """
+
+        cropped_dir = make_proper_dir_name(self.output_dir + 'Final_GW_Cropped')
+        makedirs([cropped_dir])
+        actual_gw_dir, pred_gw_dir = rops.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
+                                                                raster_mask=self.input_ama_ina_reproj_file,
+                                                                output_dir=cropped_dir, gdal_path=self.gdal_path,
+                                                                already_cropped=already_cropped)
+        return actual_gw_dir, pred_gw_dir
+
 
 def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True, show_box_plots=False,
               load_df=False, show_train_test_box_plots=False, build_ml_model=True):
@@ -826,11 +869,11 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
             remove_na = True
             gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
                                 already_downloaded=load_files, already_extracted=load_files)
-        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr,
+        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=2e+4)
-        gw.crop_gw_rasters(use_ama_ina=True, already_cropped=load_files)
+        gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
@@ -846,17 +889,17 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
             max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
             rf_model = gw.build_model(df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                       load_model=load_rf_model, max_features=max_features, plot_graphs=False)
-            use_full_extent = False
-            if subsidence_analysis:
-                use_full_extent = True
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(),
-                                                            only_pred=False, use_full_extent=use_full_extent)
+                                                            only_pred=False, use_full_extent=subsidence_analysis)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=load_files)
 
     if build_ml_model:
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
+                        forecast_years=(2019,))
+        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_files)
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
                         forecast_years=(2019,))
         ma.subsidence_analysis(subsidence_gw_dir)

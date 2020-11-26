@@ -12,6 +12,7 @@ import subprocess
 import xmltodict
 import os
 import multiprocessing
+import pandas as pd
 from joblib import Parallel, delayed
 from rasterio.plot import plotting_extent
 from rasterio.mask import mask
@@ -22,6 +23,7 @@ from datetime import datetime
 from glob import glob
 from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str, make_proper_dir_name, makedirs
 from Python_Files.hydrolibs.vectorops import shp2raster
+from Python_Files.hydrolibs.model_analysis import get_error_stats
 
 NO_DATA_VALUE = -32767.0
 
@@ -394,7 +396,7 @@ def crop_rasters(input_raster_dir, input_mask_file, outdir, pattern='*.tif', ext
     :return: None
     """
 
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
     Parallel(n_jobs=num_cores)(delayed(parallel_crop_rasters)(raster_file, input_mask_file, outdir, ext_mask, gdal_path,
                                                               multi_poly, verbose)
                                for raster_file in glob(input_raster_dir + pattern))
@@ -579,7 +581,7 @@ def compute_rasters_from_shp(input_raster_dir, input_shp_dir, outdir, nan_fill=0
     raster_files, shp_files = glob(input_raster_dir + pattern), glob(input_shp_dir + '*.shp')
     raster_files.sort()
     shp_files.sort()
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
     Parallel(n_jobs=num_cores)(delayed(parallel_raster_compute)(raster_file, shp_file, outdir=outdir, nan_fill=nan_fill,
                                                                 point_arithmetic=point_arithmetic,
                                                                 value_field_pos=value_field_pos, gdal_path=gdal_path,
@@ -723,12 +725,14 @@ def create_monthly_avg_raster_dict(input_raster_dir, pattern='GRACE*.tif'):
     return raster_dict
 
 
-def fix_large_values(input_raster_dir, outdir, max_threshold=1e+5, pattern='GW*.tif'):
+def fix_gw_raster_values(input_raster_dir, outdir, max_threshold=1e+5, fix_only_negative=False, pattern='GW*.tif'):
     """
-    Fix unusually large values introduced by gdal_rasterize sometimes
+    Fix unusually large values introduced by gdal_rasterize sometimes or remove negative pumpings indicating
+    no well data
     :param input_raster_dir: Input raster directory
     :param outdir: Output directory
-    :param max_threshold: Max value beyond which values will be set to no data value, default unit is acrefit
+    :param max_threshold: Max value beyond which values will be set to no data value, default unit is acrefeet
+    :param fix_only_negative: Set True to fix only negative values
     :param pattern: File pattern
     :return: None
     """
@@ -737,7 +741,11 @@ def fix_large_values(input_raster_dir, outdir, max_threshold=1e+5, pattern='GW*.
         out_raster = outdir + raster_file[raster_file.rfind(os.sep) + 1:]
         raster_arr, raster_file = read_raster_as_arr(raster_file)
         raster_arr[np.isnan(raster_arr)] = NO_DATA_VALUE
-        raster_arr[raster_arr >= max_threshold] = NO_DATA_VALUE
+        raster_arr[np.logical_and(raster_arr > 0, raster_arr < 1e-8)] = 0.
+        if fix_only_negative:
+            raster_arr[raster_arr < 0] = NO_DATA_VALUE
+        else:
+            raster_arr[raster_arr >= max_threshold] = NO_DATA_VALUE
         write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=out_raster)
 
 
@@ -831,7 +839,7 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
         len_precip_list = len(precip_file_list)
         agri_file_list *= len_precip_list
         urban_file_list *= len_precip_list
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
     raster_file_lists = zip(precip_file_list, et_file_list, agri_file_list, urban_file_list)
     Parallel(n_jobs=num_cores)(delayed(compute_water_stress_index_raster)(watershed_shp_file, raster_file_list,
                                                                           output_dir, gdal_path=gdal_path,
@@ -927,7 +935,7 @@ def organize_subsidence_data(input_subsidence_dir, output_dir, ref_raster, gdal_
     """
 
     subsidence_dirs = glob(input_subsidence_dir + '*')
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
     Parallel(n_jobs=num_cores)(delayed(parallel_organize_subsidence_data)(subsidence_dir, output_dir, ref_raster,
                                                                           gdal_path, decorrelated_value, verbose)
                                for subsidence_dir in subsidence_dirs)
@@ -980,7 +988,7 @@ def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_rast
 def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, output_dir, scale_to_cm=True,
                                       verbose=False):
     """
-    Create total predicted GW withdrawal rasters based on subsidence years
+    Create total and mean predicted GW withdrawal and subsidence rasters based on subsidence years
     :param input_pred_gw_dir: Input predicted GW raster directory
     :param input_subsidence_dir: Input subsidence directory having organized subsidence data
     :param output_dir: Output directory
@@ -1011,13 +1019,20 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, o
         if verbose:
             print('\n')
         tpgw_nan_pos = np.isnan(total_pred_raster)
+        num_years = int(end_year) - int(start_year) + 1
+        mean_pred_raster = total_pred_raster / num_years
         total_pred_raster[tpgw_nan_pos] = NO_DATA_VALUE
+        mean_pred_raster[tpgw_nan_pos] = NO_DATA_VALUE
         total_subsidence_raster = np.zeros_like(total_pred_raster)
         total_subsidence_raster[tpgw_nan_pos] = np.nan
         tpgw_dir = make_proper_dir_name(output_dir + 'TPGW')
         makedirs([tpgw_dir])
         out_raster = tpgw_dir + 'TPGW_' + start_year + '_' + end_year + '.tif'
         write_raster(total_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
+        mpgw_dir = make_proper_dir_name(output_dir + 'MPGW')
+        makedirs([mpgw_dir])
+        out_raster = mpgw_dir + 'MPGW_' + start_year + '_' + end_year + '.tif'
+        write_raster(mean_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
         subsidence_rasters = glob(subsidence_dir + '/*.tif')
         subsidence_gw_dir = make_proper_dir_name(output_dir + 'Subsidence_GW/' + start_year + '_' + end_year)
         makedirs([subsidence_gw_dir])
@@ -1032,14 +1047,20 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, o
             total_subsidence_raster += s_arr
             total_pred_raster[subsidence_nan_pos] = NO_DATA_VALUE
             subsidence_arr[subsidence_nan_pos] = NO_DATA_VALUE
+            mean_pred_raster[subsidence_nan_pos] = NO_DATA_VALUE
             out_raster = subsidence_gw_dir + subsidence_area + '_TPGW_' + start_year + '_' + end_year + '.tif'
             write_raster(total_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
+            out_raster = subsidence_gw_dir + subsidence_area + '_MPGW_' + start_year + '_' + end_year + '.tif'
+            write_raster(mean_pred_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
             write_raster(subsidence_arr, subsidence_file, transform=subsidence_file.transform,
                          outfile_path=subsidence_gw_dir + subsidence_raster_name)
-        out_total_subsidence_raster = subsidence_gw_dir + 'TS_' + start_year + '_' + end_year + '.tif'
+        out_raster = subsidence_gw_dir + 'TS_' + start_year + '_' + end_year + '.tif'
+        mean_subsidence_raster = total_subsidence_raster / num_years
         total_subsidence_raster[tpgw_nan_pos] = NO_DATA_VALUE
-        write_raster(total_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform,
-                     outfile_path=out_total_subsidence_raster)
+        mean_subsidence_raster[tpgw_nan_pos] = NO_DATA_VALUE
+        write_raster(total_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
+        out_raster = subsidence_gw_dir + 'MS_' + start_year + '_' + end_year + '.tif'
+        write_raster(mean_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
 
 
 def create_crop_coeff_raster(input_cdl_file, output_file):
@@ -1080,3 +1101,47 @@ def update_crop_coeff_raster(input_crop_coeff_raster, cdl_reclass_raster):
     crop_coeff_arr[np.logical_and(~np.isnan(cdl_reclass_arr), cdl_reclass_arr != 1)] = 0.
     write_raster(crop_coeff_arr, crop_coeff_file, transform=crop_coeff_file.transform,
                  outfile_path=input_crop_coeff_raster)
+
+
+def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, gdal_path, already_cropped=False):
+    """
+    Crop actual and predicted GW rasters based on the Arizona AMA/INA mask, should be called after
+    predicted GW rasters have been created. Also, shows the error metrics of the cropped actual and
+    predicted GW rasters.
+    :param actual_gw_dir: Actual GW raster directory
+    :param pred_gw_dir: Predicted GW raster directory
+    :param raster_mask: Input raster mask shapefile path
+    :param output_dir: Output directory
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param already_cropped: Set True to disable cropping
+    :return: Actual and Predicted cropped GW directories a tuple
+    """
+
+    actual_out_gw_dir = make_proper_dir_name(output_dir + 'Actual_GW')
+    pred_out_gw_dir = make_proper_dir_name(output_dir + 'Pred_GW')
+    if not already_cropped:
+        makedirs([actual_out_gw_dir, pred_out_gw_dir])
+        crop_rasters(actual_gw_dir, outdir=actual_out_gw_dir, input_mask_file=raster_mask, gdal_path=gdal_path,
+                     pattern='GW*.tif', multi_poly=True)
+        crop_rasters(pred_gw_dir, outdir=pred_out_gw_dir, input_mask_file=raster_mask, gdal_path=gdal_path,
+                     multi_poly=True)
+    actual_rasters, pred_rasters = glob(actual_out_gw_dir + '*.tif'), glob(pred_out_gw_dir + '*.tif')
+    actual_rasters, pred_rasters = sorted(actual_rasters), sorted(pred_rasters)
+    print('\nCropped AMA/INA stats...')
+    pred_error_df = pd.DataFrame()
+    for actual_raster, pred_raster in zip(actual_rasters, pred_rasters):
+        actual_arr = read_raster_as_arr(actual_raster, get_file=False).ravel()
+        pred_arr = read_raster_as_arr(pred_raster, get_file=False).ravel()
+        error_df = pd.DataFrame(data={'Actual': actual_arr, 'Pred': pred_arr})
+        error_df = error_df.dropna()
+        pred_error_df = pred_error_df.append(error_df)
+        r2_score, mae, rmse, nmae, nrmse = get_error_stats(error_df.Actual, error_df.Pred)
+        year = actual_raster[actual_raster.rfind('_') + 1: actual_raster.rfind('.')]
+        print('YEAR', int(year), ': MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
+              'Normalized MAE =', nmae)
+    r2_score, mae, rmse, nmae, nrmse = get_error_stats(pred_error_df.Actual, pred_error_df.Pred)
+    print('\nOverall error stats...')
+    print('MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
+          'Normalized MAE =', nmae)
+    return actual_out_gw_dir, pred_out_gw_dir

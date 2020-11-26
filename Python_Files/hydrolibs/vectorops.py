@@ -123,7 +123,8 @@ def csv2shp(input_csv_file, outfile_path, delim=',', source_crs='epsg:4326', tar
 
 
 def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_file, fill_attr='AF Pumped',
-                           filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
+                           filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', use_only_ama_ina=False,
+                           **kwargs):
     """
     Add an attribute present in the GW csv file to the Well Registry shape file based on matching ids given in kwargs.
     By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
@@ -136,6 +137,7 @@ def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_fi
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
     :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
     :param filter_attr_value: Value for filter_attr
+    :param use_only_ama_ina: Set True to use only AMA/INA for model training
     :return: None
     """
 
@@ -167,12 +169,20 @@ def add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_fi
             if len(csv_id_modified) == 5:
                 csv_id_modified = '0' + csv_id_modified
             well_reg_gdf.loc[well_reg_gdf[shp_well_id] == csv_id_modified, fill_attr] = fill_value
-    well_reg_gdf.to_file(out_gw_shp_file)
+    if not use_only_ama_ina:
+        well_reg_schema = fiona.open(input_well_reg_file).schema
+        well_reg_schema['properties'][fill_attr] = 'float:24.20'
+        well_reg_gdf.loc[well_reg_gdf['AMA'] == filter_attr_value, fill_attr] = -1e-16
+        well_reg_gdf.loc[well_reg_gdf[fill_attr] == 0., fill_attr] = 1e-10
+        well_reg_gdf.to_file(out_gw_shp_file, schema=well_reg_schema)
+    else:
+        well_reg_gdf.to_file(out_gw_shp_file)
     print(input_gw_csv_file, ': Matched wells:', well_reg_gdf.count()[shp_well_id])
 
 
 def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_gw_shp_dir, fill_attr='AF Pumped',
-                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
+                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA',
+                                    use_only_ama_ina=False, **kwargs):
     """
     Add an attribute present in the GW csv file to the Well Registry shape files (yearwise) based on matching ids given
     in kwargs. By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
@@ -185,19 +195,22 @@ def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_g
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
     :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
     :param filter_attr_value: Value for filter_attr
+    :param use_only_ama_ina: Set True to use only AMA/INA for model training
     :return: None
     """
 
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count() - 1
     print('Updating Well Registry shapefiles...\n')
     Parallel(n_jobs=num_cores - 1)(delayed(parallel_add_attribute_well_reg)(input_well_reg_file, input_gw_csv_file,
                                                                             out_gw_shp_dir, fill_attr, filter_attr,
-                                                                            filter_attr_value, **kwargs)
+                                                                            filter_attr_value, use_only_ama_ina,
+                                                                            **kwargs)
                                    for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
 
 
 def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_dir, fill_attr='AF Pumped',
-                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA', **kwargs):
+                                    filter_attr='AMA', filter_attr_value='OUTSIDE OF AMA OR INA',
+                                    use_only_ama_ina=False, **kwargs):
     """
     Add an attribute present in the GW csv file to the Well Registry shape files (yearwise) based on matching ids given
     in kwargs. By default, the GW withdrawal is added. The csv ids must include: csv_well_id, csv_mov_id, csv_water_id,
@@ -210,6 +223,7 @@ def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_
     :param out_gw_shp_dir: Output GWSI shapefile directory having GW withdrawal data
     :param fill_attr: Attribute present in the CSV file to add to Well Registry
     :param filter_attr: Remove specific wells based on this attribute. Set None to disable filtering.
+    :param use_only_ama_ina: Set True to use only AMA/INA for model training
     :param filter_attr_value: Value for filter_attr
     :return: None
     """
@@ -217,7 +231,7 @@ def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_
     out_well_reg_file = out_gw_shp_dir + input_gw_csv_file[input_gw_csv_file.rfind(os.sep) + 1:
                                                            input_gw_csv_file.rfind('.')] + '.shp'
     add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_well_reg_file, fill_attr, filter_attr,
-                           filter_attr_value, **kwargs)
+                           filter_attr_value, use_only_ama_ina, **kwargs)
 
 
 def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
@@ -239,7 +253,7 @@ def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
 
 
 def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0, xres=1000., yres=1000., gridding=True,
-               smoothing=4800, add_value=True, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+               smoothing=4800, burn_value=None, add_value=True, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert Shapefile to Raster TIFF file
     :param input_shp_file: Input Shapefile path
@@ -251,6 +265,7 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
     :param gridding: Set false to use gdal_rasterize (If gridding is True, the Inverse Distance Square algorithm used
     with default parameters)
     :param smoothing: Level of smoothing (higher values imply higher smoothing effect)
+    :param burn_value: Set a fixed burn value instead of using value_field.
     :param add_value: Set False to disable adding value to existing raster cell
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
@@ -258,7 +273,10 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
     """
 
     ext_pos = input_shp_file.rfind('.')
-    layer_name = input_shp_file[input_shp_file.rfind(os.sep) + 1: ext_pos]
+    sep_pos = input_shp_file.rfind(os.sep)
+    if sep_pos == -1:
+        sep_pos = input_shp_file.rfind('/')
+    layer_name = input_shp_file[sep_pos + 1: ext_pos]
     shp_file = gpd.read_file(input_shp_file)
     if value_field is None:
         value_field = shp_file.columns[value_field_pos]
@@ -269,6 +287,10 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
         args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
                 str(miny), str(maxx), str(maxy), '-init', str(0.0), '-add', '-ot', 'Float32', '-of', 'GTiff',
                 '-a_nodata', str(no_data_value), input_shp_file, outfile_path]
+        if burn_value is not None:
+            args = ['-l', layer_name, '-burn', str(burn_value), '-tr', str(xres), str(yres), '-te', str(minx),
+                    str(miny), str(maxx), str(maxy), '-init', str(0.0), '-add', '-ot', 'Float32', '-of', 'GTiff',
+                    '-a_nodata', str(no_data_value), input_shp_file, outfile_path]
         if not add_value:
             args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
                     str(miny), str(maxx), str(maxy), '-ot', 'Float32', '-of', 'GTiff', '-a_nodata', str(no_data_value),
@@ -301,12 +323,13 @@ def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', de
         csv2shp(file, outfile_path=outfile_path, delim=delim, target_crs=target_crs, long_lat_pos=long_lat_pos)
 
 
-def shps2rasters(input_dir, output_dir, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
+def shps2rasters(input_dir, output_dir, burn_value=None, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
                  smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert all shapefiles to corresponding TIFF files
     :param input_dir: Input directory containing Shapefiles which are named as <Layer_Name>_<Year>.shp
     :param output_dir: Output directory
+    :param burn_value: Set a fixed burn value instead of using value_field.
     :param value_field: Name of the value attribute. Set None to use value_field_pos
     :param value_field_pos: Value field position (zero indexing)
     :param xres: Pixel width in geographic units
@@ -319,19 +342,21 @@ def shps2rasters(input_dir, output_dir, value_field=None, value_field_pos=0, xre
     :return: None
     """
 
-    num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir, value_field=value_field,
-                                                            value_field_pos=value_field_pos, xres=xres, yres=yres,
-                                                            gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
+    num_cores = multiprocessing.cpu_count() - 1
+    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir, burn_value=burn_value,
+                                                            value_field=value_field, value_field_pos=value_field_pos,
+                                                            xres=xres, yres=yres, gdal_path=gdal_path,
+                                                            gridding=gridding, smoothing=smoothing)
                                for shp_file in glob(input_dir + '*.shp'))
 
 
-def parallel_shp2raster(shp_file, output_dir, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
-                        smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+def parallel_shp2raster(shp_file, output_dir, burn_value=None, value_field=None, value_field_pos=0, xres=1000,
+                        yres=1000, gridding=True, smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Use this from #shp2rasters to parallelize raster creation
     :param shp_file: Input shapefile
     :param output_dir: Output directory
+    :param burn_value: Set a fixed burn value instead of using value_field.
     :param value_field: Name of the value attribute. Set None to use value_field_pos
     :param value_field_pos: Value field position (zero indexing)
     :param xres: Pixel width in geographic units
@@ -346,7 +371,7 @@ def parallel_shp2raster(shp_file, output_dir, value_field=None, value_field_pos=
 
     outfile_path = output_dir + shp_file[shp_file.rfind(os.sep) + 1: shp_file.rfind('.') + 1] + 'tif'
     shp2raster(shp_file, outfile_path=outfile_path, value_field=value_field, value_field_pos=value_field_pos, xres=xres,
-               yres=yres, gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
+               yres=yres, burn_value=burn_value, gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
 
 
 def extract_gdb_data(input_gdb_dir, attr_name, year_list, outdir, source_crs='epsg:4326', target_crs='epsg:4326',
