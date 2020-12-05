@@ -3,6 +3,7 @@ library(rgdal)
 library(colorRamps)
 library(rasterVis)
 library(viridisLite)
+library(usmap)
 library(RColorBrewer)
 
 err.raster.list <- list()
@@ -42,27 +43,33 @@ breaks <- seq(min_value, max_value, by=300)
 col <- topo.colors(length(breaks) - 1)
 col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
-plot_ext <- extent(-114, -109, 31, 35)
-
 min_value_error  <- round(min(minValue(err.raster.stack)))
 max_value_error <- round(max(maxValue(err.raster.stack)))
 min_value_error <- floor(min_value_error / 100) * 100
 max_value_error <- ceiling(max_value_error / 100) * 100
-breaks_error <- seq(min_value_error, max_value_error, by=300)
-col_error <- brewer.pal(n=length(breaks_error) - 1, name='Reds')
+breaks_error <- seq(min_value_error, max_value_error, by=500)
+col_error <- brewer.pal(n=length(breaks_error), name='Reds')
 
+az_map <- readOGR('../../Inputs/Data/Arizona_GW/Arizona/Arizona.shp')
+ama_map <- readOGR('../../Inputs/Data/Arizona_GW/Boundary/AMA_and_INA.shp')
+az_map <- crop(az_map, extent(-114.99, -109, 31, 37))
+plot_ext <- extent(-115, -109, 31, 37)
 n <- 8
-plot(actual.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
+plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
+plot(actual.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 1, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext, add=T)
+plot(ama_map, col=NA, border='coral', add=T)
 
+#plot(az_map, col='NA', border='NA')
 plot(pred.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
 
+plot(az_map, col='grey', border='NA')
 plot(err.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Error (mm)', side = 2, font = 0.5, cex = 1), breaks=breaks_error, zlim=c(min_value_error, max_value_error), col=col_error, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
 
 
 min_value_mean  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
@@ -71,10 +78,13 @@ max_value_mean <- ceiling(max_value_mean / 100) * 100
 breaks_mean <- seq(min_value_mean, max_value_mean, by=300)
 col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 
-plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.8), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
-plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted Mean GW Pumping (mm)', side = 2, font = 0.55, cex = 0.8), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(31:35))
-axis(side=1, at=c(-114:-109))
+
+plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
+plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
+plot(ama_map, col=NA, border='coral', add=T)
+plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
+axis(side=2, at=c(31:37))
+axis(side=1, at=c(-115:-109))
 
 min_value_mean_error  <- round(minValue(err.mean.raster))
 max_value_mean_error  <- round(maxValue(err.mean.raster))

@@ -934,7 +934,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
         drop_attrs = ('YEAR',)
         exclude_vars = ('ET',)
         pred_attr = 'GW'
-        max_features = len(final_gw_df.columns.values.tolist()) - len(drop_attrs) - 1
+        max_features = len(final_gw_df.columns.tolist()) - len(drop_attrs) - 1
         gw = HydroML(None, None, output_dir, None, None, None, None)
         rf_model = gw.build_model(final_gw_df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
                                   load_model=False, max_features=max_features, plot_graphs=False)
