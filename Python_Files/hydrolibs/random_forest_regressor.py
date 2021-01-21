@@ -19,19 +19,26 @@ from Python_Files.hydrolibs import rasterops as rops
 from Python_Files.hydrolibs import model_analysis as ma
 
 
-def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif', exclude_years=(), exclude_vars=(),
-                     make_year_col=True, ordering=False, remove_na=True):
+def create_dataframe(input_file_dir, input_gw_file, output_dir, label_attr, column_names=None, pattern='*.tif',
+                     exclude_years=(), exclude_vars=(), make_year_col=True, ordering=False, load_gw_info=False,
+                     remove_na=True):
     """
     Create dataframe from file list
     :param input_file_dir: Input directory where the file names begin with <Variable>_<Year>, e.g, ET_2015.tif
-    :param out_df: Output Dataframe file
+    :param input_gw_file: Input GMD (Kansas) or AMA/INA (Arizona) shape file
+    :param output_dir: Output directory
+    :param label_attr: Label attribute present in the GW shapefile. Set 'GMD_label' for Kansas and
+    'NAME_ABBR' for Arizona
     :param column_names: Dataframe column names, these must be df headers
     :param pattern: File pattern to look for in the folder
     :param exclude_years: Exclude these years from the dataframe
     :param exclude_vars: Exclude these variables from the dataframe
     :param make_year_col: Make a dataframe column entry for year
     :param ordering: Set True to order dataframe column names
+    :param load_gw_info: Set True to load previously created GWinfo raster containing the name of the GMD (Kansas) or
+    AMA/INA (Arizona) regions
     :param remove_na: Set False to disable NA removal
+    :return: GMD Numpy array
     :return: Pandas dataframe
     """
 
@@ -41,12 +48,14 @@ def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif',
         variable, year = f[f.rfind(os.sep) + 1: sep], f[sep + 1: f.rfind('.')]
         if variable not in exclude_vars and int(year) not in exclude_years:
             raster_file_dict[int(year)].append(f)
-
     raster_dict = {}
     flag = False
     years = sorted(list(raster_file_dict.keys()))
     df = None
     raster_arr = None
+    gw_arr = rops.get_gw_info_arr(raster_file_dict[years[0]][0], input_gw_file, output_dir=output_dir,
+                                    label_attr=label_attr, load_gw_info=load_gw_info)
+    gw_arr = gw_arr.ravel()
     for year in years:
         file_list = raster_file_dict[year]
         for raster_file in file_list:
@@ -61,10 +70,11 @@ def create_dataframe(input_file_dir, out_df, column_names=None, pattern='*.tif',
             flag = True
         else:
             df = df.append(pd.DataFrame(data=raster_dict))
-
+    df['GW_NAME'] = gw_arr.tolist() * len(years)
     if remove_na:
         df = df.dropna(axis=0)
     df = reindex_df(df, column_names=column_names, ordering=ordering)
+    out_df = output_dir + 'raster_df.csv'
     df.to_csv(out_df, index=False)
     return df
 
@@ -95,38 +105,45 @@ def get_rf_model(rf_file):
     return pickle.load(open(rf_file, mode='rb'))
 
 
-def split_data_train_test(input_df, pred_attr='GW', shuffle=True, random_state=0, test_size=0.2, outdir=None,
-                          drop_attrs=(), test_year=None):
+def split_data_train_test_ratio(input_df, pred_attr='GW', shuffle=True, random_state=0, test_size=0.2, outdir=None,
+                                test_year=None, test_gw=None, use_gw=False):
     """
-    Split data preserving temporal variations
+    Split data based on train-test percentage
     :param input_df: Input dataframe
     :param pred_attr: Prediction attribute name
     :param shuffle: Default True for shuffling
     :param random_state: Random state used during train test split
     :param test_size: Test data size percentage (0<=test_size<=1)
     :param outdir: Set path to store intermediate files
-    :param drop_attrs: Drop these specified attributes
     :param test_year: Build test data from only this year
+    :param test_gw: Build test data from only this GMD or AMA/INA region, use_gw must be set to True
+    :param use_gw: Set True to build test data from only test_gmd
     :return: X_train, X_test, y_train, y_test
     """
 
     years = set(input_df['YEAR'])
+    gws = set(input_df['GW_NAME'])
     x_train_df = pd.DataFrame()
     x_test_df = pd.DataFrame()
     y_train_df = pd.DataFrame()
     y_test_df = pd.DataFrame()
     flag = False
-    if test_year in years:
+    if (test_year in years) or (use_gw and test_gw in gws):
         flag = True
-    drop_columns = [pred_attr] + list(drop_attrs)
-    for year in years:
-        selected_data = input_df.loc[input_df['YEAR'] == year]
+    selection_var = years
+    selection_label = 'YEAR'
+    test_var = test_year
+    if use_gw:
+        selection_var = gws
+        selection_label = 'GW_NAME'
+        test_var = test_gw
+    for svar in selection_var:
+        selected_data = input_df.loc[input_df[selection_label] == svar]
         y = selected_data[pred_attr]
-        selected_data = selected_data.drop(columns=drop_columns)
         x_train, x_test, y_train, y_test = train_test_split(selected_data, y, shuffle=shuffle,
                                                             random_state=random_state, test_size=test_size)
         x_train_df = x_train_df.append(x_train)
-        if (flag and test_year == year) or not flag:
+        if (flag and test_var == svar) or not flag:
             x_test_df = x_test_df.append(x_test)
             y_test_df = pd.concat([y_test_df, y_test])
         y_train_df = pd.concat([y_train_df, y_train])
@@ -140,31 +157,39 @@ def split_data_train_test(input_df, pred_attr='GW', shuffle=True, random_state=0
     return x_train_df, x_test_df, y_train_df[0].ravel(), y_test_df[0].ravel()
 
 
-def split_yearly_data(input_df, pred_attr='GW', outdir=None, drop_attrs=(), test_years=(2016, ), shuffle=True,
-                      random_state=0):
+def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016, ), test_gws=('DIN',),
+                         use_gws=False, shuffle=True, random_state=0):
     """
-    Split data based on the years
+    Split data based on a particular attribute like year or GMD
     :param input_df: Input dataframe
     :param pred_attr: Prediction attribute name
     :param outdir: Set path to store intermediate files
-    :param drop_attrs: Drop these specified attributes
     :param test_years: Build test data from only these years
+    :param test_gws: Build test data from only these GMDs or AMA/INA regions, use_gws must be set to True
+    :param use_gws: Set True to build test data from only test_gws
     :param shuffle: Set False to stop data shuffling
     :param random_state: Seed for PRNG
     :return: X_train, X_test, y_train, y_test
     """
 
     years = set(input_df['YEAR'])
+    gws = set(input_df['GW_NAME'])
     x_train_df = pd.DataFrame()
     x_test_df = pd.DataFrame()
     y_train_df = pd.DataFrame()
     y_test_df = pd.DataFrame()
-    drop_columns = [pred_attr] + list(drop_attrs)
-    for year in years:
-        selected_data = input_df.loc[input_df['YEAR'] == year]
+    selection_var = years
+    selection_label = 'YEAR'
+    test_vars = test_years
+    if use_gws:
+        selection_var = gws
+        selection_label = 'GW_NAME'
+        test_vars = test_gws
+    for svar in selection_var:
+        selected_data = input_df.loc[input_df[selection_label] == svar]
         y_t = selected_data[pred_attr]
-        x_t = selected_data.drop(columns=drop_columns)
-        if year not in test_years:
+        x_t = selected_data
+        if svar not in test_vars:
             x_train_df = x_train_df.append(x_t)
             y_train_df = pd.concat([y_train_df, y_t])
         else:
@@ -246,9 +271,10 @@ def create_pdplots(x_train, rf_model, outdir, plot_3d=False, descriptive_labels=
         plt.show()
 
 
-def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=True, max_features=None, test_size=0.2,
+def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=True, max_features=None, test_size=0.2,
                  pred_attr='GW', shuffle=True, plot_graphs=False, plot_3d=False, plot_dir=None, drop_attrs=(),
-                 test_case='', test_year=None, split_yearly=True, load_model=True, calc_perm_imp=False):
+                 test_case='', test_year=None, test_gw=None, use_gw=False, split_attribute=True, load_model=True,
+                 calc_perm_imp=False):
     """
     Perform random forest regression
     :param input_df: Input pandas dataframe
@@ -265,9 +291,12 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
     :param plot_dir: Directory for storing PDP data
     :param drop_attrs: Drop these specified attributes
     :param test_case: Used for writing the test case number to the CSV
-    :param test_year: Build test data from only this year. Use tuple of years to split train test data using
-    #split_yearly_data
-    :param split_yearly: Split train test data based on years
+    :param test_year: Build test data from only this year. Use tuple of years to split train and test data using
+    #split_data_attribute
+    :param test_gw: Build test data from only this GMD (Kansas) or AMA/INA (Arizona) region, use_gw must be set to True.
+    Use tuple of years to split train and test data using #split_data_attribute
+    :param use_gw: Set True to build test data from only test_gw
+    :param split_attribute: Split train test data based on a particular attribute like year or GMD
     :param load_model: Load an earlier pre-trained RF model
     :param calc_perm_imp: Set True to get permutation importances on train and test data
     :return: Random forest model
@@ -281,15 +310,20 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
         x_test = pd.read_csv(out_dir + 'X_Test.csv')
         y_test = pd.read_csv(out_dir + 'Y_Test.csv')
     else:
-        if not split_yearly:
-            x_train, x_test, y_train, y_test = split_data_train_test(input_df, pred_attr=pred_attr, test_size=test_size,
-                                                                     random_state=random_state, shuffle=shuffle,
-                                                                     outdir=out_dir, drop_attrs=drop_attrs,
-                                                                     test_year=test_year)
+        if not split_attribute:
+            x_train, x_test, y_train, y_test = split_data_train_test_ratio(input_df, pred_attr=pred_attr,
+                                                                           test_size=test_size,
+                                                                           random_state=random_state, shuffle=shuffle,
+                                                                           outdir=out_dir, test_year=test_year,
+                                                                           test_gw=test_gw, use_gw=use_gw)
         else:
-            x_train, x_test, y_train, y_test = split_yearly_data(input_df, pred_attr=pred_attr, outdir=out_dir,
-                                                                 drop_attrs=drop_attrs, test_years=test_year,
-                                                                 shuffle=shuffle, random_state=random_state)
+            x_train, x_test, y_train, y_test = split_data_attribute(input_df, pred_attr=pred_attr, outdir=out_dir,
+                                                                    test_years=test_year, shuffle=shuffle,
+                                                                    random_state=random_state, test_gws=test_gw,
+                                                                    use_gws=use_gw)
+        drop_columns = [pred_attr] + list(drop_attrs)
+        x_train = x_train.drop(columns=drop_columns)
+        x_test = x_test.drop(columns=drop_columns)
         regressor = RandomForestRegressor(n_estimators=n_estimators, random_state=random_state, bootstrap=bootstrap,
                                           max_features=max_features, n_jobs=-1, oob_score=True)
         regressor.fit(x_train, y_train)
@@ -300,11 +334,11 @@ def rf_regressor(input_df, out_dir, n_estimators=200, random_state=0, bootstrap=
     feature_imp = " ".join(str(np.round(i, 2)) for i in regressor.feature_importances_)
     permutation_imp_train, permutation_imp_test = None, None
     if calc_perm_imp:
-        permutation_imp_train = permutation_importance(regressor, x_train, y_train, n_repeats=10,
-                                                       random_state=random_state, n_jobs=-1)
+        permutation_imp_train = permutation_importance(regressor, x_train, y_train, n_repeats=10, n_jobs=-1,
+                                                       random_state=random_state)
         permutation_imp_train = " ".join(str(np.round(i, 2)) for i in permutation_imp_train.importances_mean)
-        permutation_imp_test = permutation_importance(regressor, x_test, y_test, n_repeats=10,
-                                                      random_state=random_state, n_jobs=-1)
+        permutation_imp_test = permutation_importance(regressor, x_test, y_test, n_repeats=10, n_jobs=-1,
+                                                      random_state=random_state)
         permutation_imp_test = " ".join(str(np.round(i, 2)) for i in permutation_imp_test.importances_mean)
     train_score = np.round(regressor.score(x_train, y_train), 2)
     test_score = np.round(regressor.score(x_test, y_test), 2)

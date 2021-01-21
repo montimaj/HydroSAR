@@ -9,11 +9,11 @@ library(RColorBrewer)
 err.raster.list <- list()
 pred.raster.list <- list()
 actual.raster.list <- list()
-years <- seq(2011, 2018)
+years <- seq(2016, 2018)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Apr_Sept/Predicted_Rasters/pred_", i, ".tif", sep=""))
-  actual.raster <- raster(paste("../../Inputs/Files_AZ_Apr_Sept/RF_Data/GW_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../../HydroNet/Outputs/Output_AZ_Apr_Sept/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  actual.raster <- raster(paste("../../../HydroNet/Inputs/Files_AZ_Apr_Sept/ML_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   actual.raster = projectRaster(actual.raster, crs = wgs84, method = "ngb")
@@ -31,6 +31,9 @@ err.mean.raster <- mean(err.raster.stack)
 actual.mean.raster <- mean(actual.raster.stack)
 pred.mean.raster <- mean(pred.raster.stack)
 
+writeRaster(actual.mean.raster, 'Actual_KS.tif')
+writeRaster(pred.mean.raster, 'Pred_KS.tif')
+
 min_value_actual  <- round(min(minValue(actual.raster.stack)))
 min_value_pred  <- round(min(minValue(pred.raster.stack)))
 min_value <- min(min_value_actual, min_value_pred)
@@ -39,7 +42,7 @@ max_value_actual <- round(max(maxValue(actual.raster.stack)))
 max_value_pred <- round(max(maxValue(pred.raster.stack)))
 max_value <- max(max_value_actual, max_value_pred)
 max_value <- ceiling(max_value / 100) * 100
-breaks <- seq(min_value, max_value, by=300)
+breaks <- seq(min_value, max_value, by=150)
 col <- topo.colors(length(breaks) - 1)
 col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
 
@@ -47,17 +50,18 @@ min_value_error  <- round(min(minValue(err.raster.stack)))
 max_value_error <- round(max(maxValue(err.raster.stack)))
 min_value_error <- floor(min_value_error / 100) * 100
 max_value_error <- ceiling(max_value_error / 100) * 100
-breaks_error <- seq(min_value_error, max_value_error, by=500)
+breaks_error <- seq(min_value_error, max_value_error, by=150)
 col_error <- brewer.pal(n=length(breaks_error), name='Reds')
 
-az_map <- readOGR('../../Inputs/Data/Arizona_GW/Arizona/Arizona.shp')
+az_map <- readOGR('../../../HydroNet/Inputs/Data/Arizona_GW/Arizona/Arizona.shp')
 ama_map <- readOGR('../../Inputs/Data/Arizona_GW/Boundary/AMA_and_INA.shp')
-az_map <- crop(az_map, extent(-114.99, -109, 31, 37))
-plot_ext <- extent(-115, -109, 31, 37)
-n <- 8
+plot_ext <- extent(-102.5, -94, 37, 40)
+plot_ext <- extent(-114.99, -109, 31, 37)
+az_map <- crop(az_map, plot_ext)
+n <- 1
 plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
-axis(side=2, at=c(31:37))
-axis(side=1, at=c(-115:-109))
+axis(side=2, at=c(37:40))
+axis(side=1, at=c(-102:-94))
 plot(actual.raster.list[[n]], xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm)', side = 2, font = 1, cex = 1), breaks=breaks, zlim=c(min_value, max_value), col=col, box=F, axes=F, ext=plot_ext, add=T)
 plot(ama_map, col=NA, border='coral', add=T)
 
@@ -75,15 +79,22 @@ axis(side=1, at=c(-115:-109))
 min_value_mean  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
 max_value_mean <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
 max_value_mean <- ceiling(max_value_mean / 100) * 100
-breaks_mean <- seq(min_value_mean, max_value_mean, by=300)
+breaks_mean <- seq(min_value_mean, max_value_mean, by=100)
 col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 
 
+min_value_mean  <- 0
+max_value_mean <- 400
+breaks_mean <- seq(min_value_mean, max_value_mean, by=50)
+col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
+
 plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
-plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
+plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
 plot(ama_map, col=NA, border='coral', add=T)
-plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
+plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
+axis(side=2, at=c(37:40))
 axis(side=2, at=c(31:37))
+axis(side=1, at=c(-103:-94))
 axis(side=1, at=c(-115:-109))
 
 min_value_mean_error  <- round(minValue(err.mean.raster))

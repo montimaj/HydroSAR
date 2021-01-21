@@ -1145,3 +1145,36 @@ def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, g
     print('MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
           'Normalized MAE =', nmae)
     return actual_out_gw_dir, pred_out_gw_dir
+
+
+def get_gw_info_arr(input_raster_file, input_gw_shp_file, output_dir, label_attr, load_gw_info=False):
+    """
+    Get GMD array wherein each pixel correspond to the GMD name. If there's no GMD,
+    :param input_raster_file: Input raster file path
+    :param input_gw_shp_file:Input GMD shape file path, should have same projection as input_raster_file
+    :param output_dir: Output directory to store the GMD array
+    :param label_attr: Label attribute present in the shapefile
+    :param load_gw_info: Set True to load previously created GMD or AMA/INA info raster
+    :return: GMD Numpy array
+    """
+
+    gw_out = output_dir + 'GW_Info.npy'
+    if os.path.isfile(gw_out) and load_gw_info:
+        print('GW Info Array already present..loading...')
+        return np.load(gw_out)
+    raster_arr, raster_file = read_raster_as_arr(input_raster_file)
+    gw_shp = gpd.read_file(input_gw_shp_file)
+    gw_arr = np.full(raster_arr.shape, fill_value='NA', dtype=np.object)
+    print('Creating GW info array...This will take some time...')
+    for idx, value in np.ndenumerate(raster_arr):
+        gx, gy = raster_file.xy(idx[0], idx[1])
+        gp = Point(gx, gy)
+        for label in gw_shp[label_attr]:
+            feature = gw_shp[gw_shp[label_attr] == label]
+            poly = feature['geometry'].iloc[0]
+            if poly.contains(gp):
+                gw_arr[idx] = label
+                break
+    gw_arr[np.isnan(raster_arr)] = np.nan
+    np.save(gw_out, gw_arr)
+    return gw_arr
