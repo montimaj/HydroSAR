@@ -581,7 +581,7 @@ class HydroML:
             print('Creating dataframe...')
             gw_file = self.input_ama_ina_reproj_file
             label_attr = 'NAME_ABBR'
-            if 'Kansas' in self.input_dir:
+            if 'KS' in self.input_dir:
                 gw_file = self.input_gw_boundary_reproj_file
                 label_attr = 'GMD_label'
             df = rfr.create_dataframe(self.rf_data_dir, input_gw_file=gw_file, output_dir=self.output_dir,
@@ -773,8 +773,8 @@ def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds
                                                             pred_attr=pred_attr, only_pred=False)
     if build_ml_model:
         input_gmd_file = file_dir + 'gmds/reproj/input_gmd_reproj.shp'
-        ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gmds=use_gmds, out_dir=output_dir,
-                        input_gmd_file=input_gmd_file)
+        ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gws=use_gmds, out_dir=output_dir,
+                        input_gw_file=input_gmd_file)
         if show_box_plots:
             ma.generate_feature_box_plots(output_dir + '/raster_df.csv')
         if show_train_test_box_plots:
@@ -839,7 +839,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('DIN',)
+    test_ama_ina = ('SCA',)
     df = pd.DataFrame()
     gw = None
     if not analyze_only:
@@ -868,7 +868,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
             if subsidence_analysis:
                 gw.organize_subsidence_rasters(already_organized=load_files)
         gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, exclude_years=(2020,),
+        df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(2020,),
                                  load_df=load_df, remove_na=remove_na)
         if build_ml_model:
             dattr = list(drop_attrs) + ['GW_NAME']
@@ -878,16 +878,17 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                                       use_gw=ama_ina_train, test_gw=test_ama_ina)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                            exclude_vars=exclude_vars, exclude_years=(),
+                                                            exclude_vars=exclude_vars, exclude_years=(2020,),
                                                             only_pred=False, use_full_extent=subsidence_analysis)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=load_files)
 
     if build_ml_model:
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
-                        forecast_years=(2020,))
-        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_files)
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
+        input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
+                        out_dir=output_dir, forecast_years=(2020,))
+        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_df)
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
                         forecast_years=(2020,))
         ma.subsidence_analysis(subsidence_gw_dir)
     return gw, df
@@ -902,9 +903,9 @@ def run_gw(build_individual_model=False, run_only_az=True):
     """
 
     analyze_only = False
-    load_files = False
-    load_rf_model = False
-    load_df = False
+    load_files = True
+    load_rf_model = True
+    load_df = True
     subsidence_analysis = False
     ama_ina_train = True
     gw_ks, ks_df = None, None
@@ -930,7 +931,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
                                                            drop_attrs=drop_attrs, exclude_vars=exclude_vars,
                                                            pred_attr=pred_attr, only_pred=False)
         grace_csv = '../Inputs/Data/Kansas_GW/GRACE/TWS_GRACE.csv'
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, input_gw_file=None, out_dir=output_dir,
                         forecast_years=(2019,))
         exclude_vars = ('ET', 'WS_PA', 'WS_PA_EA', 'WS_PT', 'WS_PT_ET')
         actual_gw_dir, pred_gw_dir = gw_az.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
@@ -938,7 +939,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
                                                            exclude_vars=exclude_vars, exclude_years=(),
                                                            only_pred=False, use_full_extent=True)
         grace_csv = '../Inputs/Data/Arizona_GW/GRACE/TWS_GRACE.csv'
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gmds=False, input_gmd_file=None, out_dir=output_dir,
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, input_gw_file=None, out_dir=output_dir,
                         forecast_years=(2019,))
 
 

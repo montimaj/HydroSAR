@@ -309,6 +309,9 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         y_train = pd.read_csv(out_dir + 'Y_Train.csv')
         x_test = pd.read_csv(out_dir + 'X_Test.csv')
         y_test = pd.read_csv(out_dir + 'Y_Test.csv')
+        drop_columns = [pred_attr] + list(drop_attrs)
+        x_train = x_train.drop(columns=drop_columns)
+        x_test = x_test.drop(columns=drop_columns)
     else:
         if not split_attribute:
             x_train, x_test, y_train, y_test = split_data_train_test_ratio(input_df, pred_attr=pred_attr,
