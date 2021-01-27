@@ -1164,7 +1164,7 @@ def get_gw_info_arr(input_raster_file, input_gw_shp_file, output_dir, label_attr
         return np.load(gw_out)
     raster_arr, raster_file = read_raster_as_arr(input_raster_file)
     gw_shp = gpd.read_file(input_gw_shp_file)
-    gw_arr = np.full(raster_arr.shape, fill_value='NA', dtype=np.object)
+    gw_arr = np.full(raster_arr.shape, fill_value='OTHER', dtype=np.object)
     print('Creating GW info array...This will take some time...')
     for idx, value in np.ndenumerate(raster_arr):
         gx, gy = raster_file.xy(idx[0], idx[1])

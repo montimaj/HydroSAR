@@ -556,7 +556,7 @@ class HydroML:
         df_file = self.output_dir + 'raster_df.csv'
         if load_df:
             print('Getting dataframe...')
-            return pd.read_csv(df_file)
+            return pd.read_csv(df_file, dtype={'GW_NAME': 'string'})
         else:
             print('Copying files...')
             makedirs([self.rf_data_dir, self.pred_data_dir])
@@ -839,7 +839,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('SCA',)
+    test_ama_ina = ('DIN',)
     df = pd.DataFrame()
     gw = None
     if not analyze_only:
@@ -857,12 +857,12 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=5000, yres=5000, max_gw=3000)
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=3000)
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3))
+        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(2, 2, 2))
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
@@ -906,7 +906,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
     load_files = True
     load_rf_model = True
     load_df = True
-    subsidence_analysis = False
+    subsidence_analysis = True
     ama_ina_train = True
     gw_ks, ks_df = None, None
     if not run_only_az:

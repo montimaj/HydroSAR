@@ -342,7 +342,7 @@ def shps2rasters(input_dir, output_dir, burn_value=None, value_field=None, value
     :return: None
     """
 
-    num_cores = multiprocessing.cpu_count() - 1
+    num_cores = multiprocessing.cpu_count() - 2
     Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir, burn_value=burn_value,
                                                             value_field=value_field, value_field_pos=value_field_pos,
                                                             xres=xres, yres=yres, gdal_path=gdal_path,
