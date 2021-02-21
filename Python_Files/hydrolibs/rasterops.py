@@ -1205,7 +1205,8 @@ def postprocess_rasters(input_raster_dir, output_dir, well_registry_raster_file,
     well_reg_arr = read_raster_as_arr(well_registry_raster_file, get_file=False)
     for raster_file in gw_rasters:
         print('Post processing', raster_file, '...')
-        gw_raster_file, gw_raster_arr = read_raster_as_arr(raster_file)
+        gw_raster_arr, gw_raster_file = read_raster_as_arr(raster_file)
         output_file = output_dir + raster_file[raster_file.rfind(os.sep) + 1:]
         gw_raster_arr[well_reg_arr == 0] = 0
+        gw_raster_arr[np.isnan(gw_raster_arr)] = NO_DATA_VALUE
         write_raster(gw_raster_arr, gw_raster_file, transform=gw_raster_file.transform, outfile_path=output_file)

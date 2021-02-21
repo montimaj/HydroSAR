@@ -880,13 +880,13 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.reproject_shapefiles(already_reprojected=load_files)
         # load_files = False
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
-        load_files = False
+        # load_files = False
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        # load_files = False
+        load_files = False
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=True)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
