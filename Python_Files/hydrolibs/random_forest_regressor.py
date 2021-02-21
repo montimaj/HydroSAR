@@ -9,7 +9,7 @@ import pickle
 import os
 from glob import glob
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from collections import defaultdict
 from sklearn.inspection import plot_partial_dependence
 from sklearn.inspection import partial_dependence
@@ -327,14 +327,26 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         drop_columns = [pred_attr] + list(drop_attrs)
         x_train = x_train.drop(columns=drop_columns)
         x_test = x_test.drop(columns=drop_columns)
-        regressor = RandomForestRegressor(n_estimators=n_estimators, random_state=random_state, bootstrap=bootstrap,
-                                          max_features=max_features, n_jobs=-1, oob_score=True)
+        param_grid = [{'n_estimators': [500],  # range(100, n_estimators + 1, 100),
+                       'max_features': range(3, max_features + 1),
+                       'random_state': [random_state]
+                       }]
+
+        print('Running RF GridSearchCV...')
+        regressor = GridSearchCV(RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap),
+                                       param_grid,
+                                       n_jobs=-2,
+                                       cv=3,
+                                       scoring=['neg_root_mean_squared_error'],
+                                       refit='neg_root_mean_squared_error')
         regressor.fit(x_train, y_train)
         pickle.dump(regressor, open(out_dir + 'rf_model', mode='wb'))
 
+    print(regressor.best_params_)
     print('Predictor... ')
-    y_pred = regressor.predict(x_test)
-    feature_imp = " ".join(str(np.round(i, 2)) for i in regressor.feature_importances_)
+    y_pred_train = regressor.predict(x_train)
+    y_pred_test = regressor.predict(x_test)
+    feature_imp = " ".join(str(np.round(i, 2)) for i in regressor.best_estimator_.feature_importances_)
     permutation_imp_train, permutation_imp_test = None, None
     if calc_perm_imp:
         permutation_imp_train = permutation_importance(regressor, x_train, y_train, n_repeats=10, n_jobs=-1,
@@ -343,13 +355,13 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         permutation_imp_test = permutation_importance(regressor, x_test, y_test, n_repeats=10, n_jobs=-1,
                                                       random_state=random_state)
         permutation_imp_test = " ".join(str(np.round(i, 2)) for i in permutation_imp_test.importances_mean)
-    train_score = np.round(regressor.score(x_train, y_train), 2)
-    test_score = np.round(regressor.score(x_test, y_test), 2)
-    r2_score, mae, rmse, nmae, nrmse = ma.get_error_stats(y_test, y_pred)
-    oob_score = np.round(regressor.oob_score_, 2)
-    df = {'Test': [test_case], 'N_Estimator': [n_estimators], 'MF': [max_features], 'F_IMP': [feature_imp],
-          'Train_Score': [train_score], 'Test_Score': [test_score], 'OOB_Score': [oob_score], 'R2': [r2_score],
-          'MAE': [mae], 'RMSE': [rmse], 'NMAE': [nmae], 'NRMSE': [nrmse]}
+    train_r2_score, train_mae, train_rmse, train_nmae, train_nrmse = ma.get_error_stats(y_train, y_pred_train)
+    test_r2_score, test_mae, test_rmse, test_nmae, test_nrmse = ma.get_error_stats(y_test, y_pred_test)
+    oob_score = np.round(regressor.best_estimator_.oob_score_, 2)
+    df = {'Test': [test_case], 'F_IMP': [feature_imp], 'Train_Score': [train_r2_score], 'Test_Score': [test_r2_score],
+          'Train_MAE': [train_mae], 'Test_MAE': [test_mae], 'Train_RMSE': [train_rmse],
+          'Test_RMSE': [test_rmse], 'Train_NMAE': [train_nmae], 'Test_NMAE': [test_nmae], 'Train_NRMSE': [train_nrmse],
+          'Test_NRMSE': [test_nrmse], 'OOB_Score': [oob_score]}
     if calc_perm_imp:
         df['P_IMP_TRAIN'], df['P_IMP_TEST'] = [permutation_imp_train], [permutation_imp_test]
     print('Model statistics:', df)

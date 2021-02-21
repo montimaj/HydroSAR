@@ -779,12 +779,12 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
         et_crop_arr = mask(et_file, [poly])[0]
         agri_crop_arr = mask(agri_file, [poly])[0]
         urban_crop_arr = mask(urban_file, [poly])[0]
-        agri_count = len(list(agri_crop_arr[agri_crop_arr > 0]))
-        urban_count = len(list(urban_crop_arr[urban_crop_arr > 0]))
-        p_avg = np.nanmean(p_crop_arr)
-        p_total = np.nansum(p_crop_arr)
-        et_avg = np.nanmean(et_crop_arr)
-        e_total = np.nansum(et_crop_arr)
+        agri_count = len(list(agri_crop_arr[agri_crop_arr > 0.5]))
+        urban_count = len(list(urban_crop_arr[urban_crop_arr > 0.5]))
+        p_avg = np.nanmean(p_crop_arr) / 1000
+        p_total = np.nansum(p_crop_arr) / 1000
+        et_avg = np.nanmean(et_crop_arr) / 1000
+        e_total = np.nansum(et_crop_arr) / 1000
         lu = agri_count + urban_count / 2.
         ws_pa = (p_avg - lu) / (p_avg + lu)
         ws_pt = (p_total - lu) / (p_total + lu)
@@ -1103,7 +1103,8 @@ def update_crop_coeff_raster(input_crop_coeff_raster, cdl_reclass_raster):
                  outfile_path=input_crop_coeff_raster)
 
 
-def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, gdal_path, already_cropped=False):
+def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, gdal_path, test_years,
+                          already_cropped=False):
     """
     Crop actual and predicted GW rasters based on the Arizona AMA/INA mask, should be called after
     predicted GW rasters have been created. Also, shows the error metrics of the cropped actual and
@@ -1114,6 +1115,7 @@ def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, g
     :param output_dir: Output directory
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param test_years: List of test years
     :param already_cropped: Set True to disable cropping
     :return: Actual and Predicted cropped GW directories a tuple
     """
@@ -1129,19 +1131,27 @@ def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, g
     actual_rasters, pred_rasters = glob(actual_out_gw_dir + '*.tif'), glob(pred_out_gw_dir + '*.tif')
     actual_rasters, pred_rasters = sorted(actual_rasters), sorted(pred_rasters)
     print('\nCropped AMA/INA stats...')
-    pred_error_df = pd.DataFrame()
+    test_pred_error_df = pd.DataFrame()
+    train_pred_error_df = pd.DataFrame()
     for actual_raster, pred_raster in zip(actual_rasters, pred_rasters):
         actual_arr = read_raster_as_arr(actual_raster, get_file=False).ravel()
         pred_arr = read_raster_as_arr(pred_raster, get_file=False).ravel()
         error_df = pd.DataFrame(data={'Actual': actual_arr, 'Pred': pred_arr})
         error_df = error_df.dropna()
-        pred_error_df = pred_error_df.append(error_df)
         r2_score, mae, rmse, nmae, nrmse = get_error_stats(error_df.Actual, error_df.Pred)
         year = actual_raster[actual_raster.rfind('_') + 1: actual_raster.rfind('.')]
+        if int(year) in test_years:
+            test_pred_error_df = test_pred_error_df.append(error_df)
+        else:
+            train_pred_error_df = train_pred_error_df.append(error_df)
         print('YEAR', int(year), ': MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
               'Normalized MAE =', nmae)
-    r2_score, mae, rmse, nmae, nrmse = get_error_stats(pred_error_df.Actual, pred_error_df.Pred)
-    print('\nOverall error stats...')
+    r2_score, mae, rmse, nmae, nrmse = get_error_stats(train_pred_error_df.Actual, train_pred_error_df.Pred)
+    print('\nTrain error stats for AMA/INA...')
+    print('MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
+          'Normalized MAE =', nmae)
+    r2_score, mae, rmse, nmae, nrmse = get_error_stats(test_pred_error_df.Actual, test_pred_error_df.Pred)
+    print('\nTest error stats for AMA/INA...')
     print('MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
           'Normalized MAE =', nmae)
     return actual_out_gw_dir, pred_out_gw_dir
@@ -1178,3 +1188,24 @@ def get_gw_info_arr(input_raster_file, input_gw_shp_file, output_dir, label_attr
     gw_arr[np.isnan(raster_arr)] = np.nan
     np.save(gw_out, gw_arr)
     return gw_arr
+
+
+def postprocess_rasters(input_raster_dir, output_dir, well_registry_raster_file, pattern='*.tif'):
+    """
+    Postprocess rasters by setting zero values to pixels having no wells
+    :param input_raster_dir: Input directory containing predicted GW pumping rasters
+    :param output_dir: Output directory
+    :param well_registry_raster_file: Well registry raster file containing locations of all the wells.
+    Must have the same CRS as the predicted rasters
+    :param pattern: Raster file pattern
+    :return: None
+    """
+
+    gw_rasters = sorted(glob(input_raster_dir + pattern))
+    well_reg_arr = read_raster_as_arr(well_registry_raster_file, get_file=False)
+    for raster_file in gw_rasters:
+        print('Post processing', raster_file, '...')
+        gw_raster_file, gw_raster_arr = read_raster_as_arr(raster_file)
+        output_file = output_dir + raster_file[raster_file.rfind(os.sep) + 1:]
+        gw_raster_arr[well_reg_arr == 0] = 0
+        write_raster(gw_raster_arr, gw_raster_file, transform=gw_raster_file.transform, outfile_path=output_file)

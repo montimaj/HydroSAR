@@ -81,6 +81,9 @@ class HydroML:
         self.converted_subsidence_dir = None
         self.pred_out_dir = None
         self.subsidence_pred_gw_dir = None
+        self.well_reg_dir = None
+        self.well_reg_mask_file = None
+        self.well_reg_reproj_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -302,11 +305,11 @@ class HydroML:
         :return: None
         """
 
-        well_reg_dir = make_proper_dir_name(self.output_dir + 'Well_Reg_Rasters')
+        self.well_reg_dir = make_proper_dir_name(self.file_dir + 'Well_Reg_Rasters')
         if not already_created:
             print('Creating well registry raster...')
-            makedirs([well_reg_dir])
-            self.well_reg_raster_file = well_reg_dir + 'well_reg.tif'
+            makedirs([self.well_reg_dir])
+            self.well_reg_raster_file = self.well_reg_dir + 'well_reg.tif'
             vops.shp2raster(self.input_gw_boundary_file, self.well_reg_raster_file, xres=xres, yres=yres, smoothing=0,
                             burn_value=1.0, gdal_path=self.gdal_path, gridding=False)
         print('Well registry raster created...')
@@ -334,7 +337,7 @@ class HydroML:
                               value_field=value_field, value_field_pos=value_field_pos, gdal_path=self.gdal_path,
                               gridding=False)
             if convert_units:
-                max_gw *= xres * yres / (1.233 * 1e+6)
+                max_gw *= xres * yres / 1.233e+6
             rops.fix_gw_raster_values(self.output_gw_raster_dir, max_threshold=max_gw, outdir=fixed_dir)
             if convert_units:
                 print('Changing GW units from acreft to mm')
@@ -417,14 +420,17 @@ class HydroML:
         self.ws_data_reproj_dir = self.file_dir + 'WS_Reproj_Rasters/'
         self.ws_ssebop_reproj_dir = self.file_dir + 'WS_SSEBop_Reproj_Rasters/'
         self.crop_coeff_reproj_dir = self.crop_coeff_dir + 'Crop_Coeff_Reproj/'
+        self.well_reg_reproj_dir = self.well_reg_dir + 'Well_Reg_Reproj/'
 
         if not already_reprojected:
             print('Reprojecting rasters...')
-            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir])
+            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster,
                                    outdir=self.crop_coeff_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.well_reg_dir, ref_raster=self.ref_raster,
+                                   outdir=self.well_reg_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
@@ -444,18 +450,22 @@ class HydroML:
             print('All rasters already reprojected')
 
     def create_land_use_rasters(self, class_values=(1, 2, 3), class_labels=('AGRI', 'SW', 'URBAN'),
-                                smoothing_factors=(3, 5, 3), already_created=False):
+                                smoothing_factors=(3, 5, 3), already_created=False, post_process=True):
         """
         Create land use rasters from the reclassified raster
         :param class_values: List of land use class values to consider for creating separate rasters
         :param class_labels: List of class_labels ordered according to land_uses
         :param smoothing_factors: Smoothing factor (sigma value for Gaussian filter) to use while smoothing
         :param already_created: Set True to disable land use raster generation
+        :param post_process: Set False to disable post processing based on well registry raster
         :return: None
         """
 
         self.land_use_dir_list = [make_proper_dir_name(self.file_dir + class_label) for class_label in class_labels]
+        self.well_reg_mask_file = self.well_reg_reproj_dir + 'Well_Reg_Mask.tif'
         if not already_created:
+            well_reg_raster = glob(self.well_reg_reproj_dir + '*.tif')[0]
+            rops.filter_nans(well_reg_raster, self.ref_raster, outfile_path=self.well_reg_mask_file)
             for idx, (class_value, class_label) in enumerate(zip(class_values, class_labels)):
                 print('Extracting land use raster for', class_label, '...')
                 raster_dir = self.land_use_dir_list[idx]
@@ -468,6 +478,8 @@ class HydroML:
                 raster_flt = raster_dir + class_label + '_flt.tif'
                 rops.apply_gaussian_filter(raster_masked, ref_file=self.ref_raster, outfile_path=raster_flt,
                                            sigma=smoothing_factors[idx], normalize=True, ignore_nan=False)
+                if post_process:
+                    rops.postprocess_rasters(raster_dir, raster_dir, self.well_reg_mask_file, pattern='*flt.tif')
         else:
             print('Land use rasters already created')
 
@@ -630,7 +642,8 @@ class HydroML:
         return rf_model
 
     def get_predictions(self, rf_model, pred_years, column_names=None, ordering=False, pred_attr='GW',
-                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=(), use_full_extent=False):
+                        only_pred=False, exclude_vars=(), exclude_years=(2019,), drop_attrs=(), use_full_extent=False,
+                        post_process=True):
         """
         Get prediction results and/or rasters
         :param rf_model: Fitted RandomForestRegressor model
@@ -643,6 +656,7 @@ class HydroML:
         :param exclude_years: List of years to exclude from dataframe
         :param drop_attrs: Drop these specified attributes
         :param use_full_extent: Set True to predict over entire region
+        :param post_process: Set False to disable postprocessing
         :return: Actual and Predicted raster directory paths
         """
 
@@ -656,6 +670,10 @@ class HydroML:
                             actual_raster_dir=actual_raster_dir, pred_attr=pred_attr, only_pred=only_pred,
                             exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
                             ordering=ordering)
+        if post_process:
+            output_dir = make_proper_dir_name(self.pred_out_dir + 'Postprocessed')
+            rops.postprocess_rasters(self.pred_out_dir, output_dir, self.well_reg_mask_file)
+            self.pred_out_dir = output_dir
         return actual_raster_dir, self.pred_out_dir
 
     def create_subsidence_pred_gw_rasters(self, scale_to_cm=True, verbose=False, already_created=False):
@@ -676,12 +694,13 @@ class HydroML:
                                                    verbose=verbose)
         print('Subsidence and total predicted GW rasters created!')
 
-    def crop_final_gw_rasters(self, actual_gw_dir, pred_gw_dir, already_cropped=False):
+    def crop_final_gw_rasters(self, actual_gw_dir, pred_gw_dir, test_years, already_cropped=False):
         """
         Crop actual and predicted GW rasters based on the Arizona AMA/INA mask, should be called after
         predicted GW rasters have been created.
         :param actual_gw_dir: Actual GW raster directory
         :param pred_gw_dir: Predicted GW raster directory
+        :param test_years: List of test years
         :param already_cropped: Set True to disable cropping
         :return: Actual and Predicted cropped GW directories a tuple
         """
@@ -691,7 +710,7 @@ class HydroML:
         actual_gw_dir, pred_gw_dir = rops.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
                                                                 raster_mask=self.input_ama_ina_reproj_file,
                                                                 output_dir=cropped_dir, gdal_path=self.gdal_path,
-                                                                already_cropped=already_cropped)
+                                                                already_cropped=already_cropped, test_years=test_years)
         return actual_gw_dir, pred_gw_dir
 
 
@@ -834,12 +853,14 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                      }
     drop_attrs = ('YEAR',)
     exclude_vars = ('ET', 'WS_PA', 'WS_PA_EA', 'WS_PT', 'WS_PT_ET')
+    test_years = range(2010, 2020)
     if build_ml_model:
-        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
+        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET', 'WS_PA_EA')
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
     test_ama_ina = ('DIN',)
+    xres, yres = 2000, 2000
     df = pd.DataFrame()
     gw = None
     if not analyze_only:
@@ -857,12 +878,16 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=1000, yres=1000, max_gw=3000)
+        # load_files = False
+        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
+        load_files = False
+        gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(2, 2, 2))
+        # load_files = False
+        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=True)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
@@ -873,13 +898,14 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         if build_ml_model:
             dattr = list(drop_attrs) + ['GW_NAME']
             max_features = len(df.columns.values.tolist()) - len(dattr) - 1
-            rf_model = gw.build_model(df, test_year=range(2011, 2020), drop_attrs=dattr, pred_attr=pred_attr,
-                                      load_model=load_rf_model, max_features=max_features, plot_graphs=False,
-                                      use_gw=ama_ina_train, test_gw=test_ama_ina)
+            rf_model = gw.build_model(df, n_estimators=1000, test_year=test_years, drop_attrs=dattr,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
+                                      plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(2020,),
-                                                            only_pred=False, use_full_extent=subsidence_analysis)
+                                                            only_pred=False, use_full_extent=subsidence_analysis,
+                                                            post_process=False)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=load_files)
 
@@ -887,7 +913,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
                         out_dir=output_dir, forecast_years=(2020,))
-        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_df)
+        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_rf_model,
+                                                              test_years=test_years)
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
                         forecast_years=(2020,))
         ma.subsidence_analysis(subsidence_gw_dir)
@@ -904,10 +931,10 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = True
-    load_df = True
+    load_rf_model = False
+    load_df = False
     subsidence_analysis = True
-    ama_ina_train = True
+    ama_ina_train = False
     gw_ks, ks_df = None, None
     if not run_only_az:
         gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
@@ -925,8 +952,8 @@ def run_gw(build_individual_model=False, run_only_az=True):
         pred_attr = 'GW'
         max_features = len(final_gw_df.columns.tolist()) - len(drop_attrs) - 1
         gw = HydroML(None, None, output_dir, None, None, None, None)
-        rf_model = gw.build_model(final_gw_df, test_year=range(2011, 2019), drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                  load_model=False, max_features=max_features, plot_graphs=False)
+        rf_model = gw.build_model(final_gw_df, n_estimators=500, test_year=range(2011, 2019), drop_attrs=drop_attrs,
+                                  pred_attr=pred_attr, load_model=False, max_features=max_features, plot_graphs=False)
         actual_gw_dir, pred_gw_dir = gw_ks.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                            drop_attrs=drop_attrs, exclude_vars=exclude_vars,
                                                            pred_attr=pred_attr, only_pred=False)
