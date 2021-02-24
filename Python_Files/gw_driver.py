@@ -82,7 +82,9 @@ class HydroML:
         self.pred_out_dir = None
         self.subsidence_pred_gw_dir = None
         self.well_reg_dir = None
-        self.well_reg_mask_file = None
+        self.well_reg_mask_dir = None
+        self.well_reg_flt_file = None
+        self.well_reg_flt_dir = None
         self.well_reg_reproj_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
@@ -462,10 +464,12 @@ class HydroML:
         """
 
         self.land_use_dir_list = [make_proper_dir_name(self.file_dir + class_label) for class_label in class_labels]
-        self.well_reg_mask_file = self.well_reg_reproj_dir + 'Well_Reg_Mask.tif'
+        self.well_reg_flt_dir = make_proper_dir_name(self.well_reg_dir + 'Flt')
+        makedirs([self.well_reg_flt_dir])
+        self.well_reg_flt_file = self.well_reg_flt_dir + 'Well_Reg_Flt.tif'
         if not already_created:
             well_reg_raster = glob(self.well_reg_reproj_dir + '*.tif')[0]
-            rops.filter_nans(well_reg_raster, self.ref_raster, outfile_path=self.well_reg_mask_file)
+            rops.filter_nans(well_reg_raster, self.ref_raster, outfile_path=self.well_reg_flt_file)
             for idx, (class_value, class_label) in enumerate(zip(class_values, class_labels)):
                 print('Extracting land use raster for', class_label, '...')
                 raster_dir = self.land_use_dir_list[idx]
@@ -479,7 +483,7 @@ class HydroML:
                 rops.apply_gaussian_filter(raster_masked, ref_file=self.ref_raster, outfile_path=raster_flt,
                                            sigma=smoothing_factors[idx], normalize=True, ignore_nan=False)
                 if post_process:
-                    rops.postprocess_rasters(raster_dir, raster_dir, self.well_reg_mask_file, pattern='*flt.tif')
+                    rops.postprocess_rasters(raster_dir, raster_dir, self.well_reg_flt_file, pattern='*flt.tif')
         else:
             print('Land use rasters already created')
 
@@ -535,12 +539,15 @@ class HydroML:
         self.raster_mask_dir = make_proper_dir_name(self.file_dir + 'Masked_Rasters')
         self.lu_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_LU')
         self.crop_coeff_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_Crop_Coeff')
+        self.well_reg_mask_dir = make_proper_dir_name(self.well_reg_dir + 'Masked')
         if not already_masked:
             print('Masking rasters...')
-            makedirs([self.raster_mask_dir, self.lu_mask_dir, self.crop_coeff_mask_dir])
+            makedirs([self.raster_mask_dir, self.lu_mask_dir, self.crop_coeff_mask_dir, self.well_reg_mask_dir])
             rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
                               pattern=pattern)
             rops.mask_rasters(self.crop_coeff_reproj_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_mask_dir,
+                              pattern=pattern)
+            rops.mask_rasters(self.well_reg_reproj_dir, ref_raster=self.ref_raster, outdir=self.well_reg_mask_dir,
                               pattern=pattern)
             for lu_dir in self.land_use_dir_list:
                 rops.mask_rasters(lu_dir, ref_raster=self.ref_raster, outdir=self.lu_mask_dir, pattern=pattern)
@@ -580,6 +587,8 @@ class HydroML:
                        pattern_list=[pattern], rep=True, verbose=verbose)
             copy_files([self.lu_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
                        pattern_list=[pattern], rep=True, verbose=verbose)
+            copy_files([self.well_reg_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
+                       pattern_list=[pattern], rep=True, verbose=verbose)
 
             input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
             pattern_list = [pattern] * len(input_dir_list)
@@ -589,6 +598,8 @@ class HydroML:
             copy_files(self.land_use_dir_list, target_dir=self.pred_data_dir, year_list=year_list,
                        pattern_list=pattern_list, rep=True, verbose=verbose)
             copy_files([self.crop_coeff_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
+                       pattern_list=[pattern], rep=True, verbose=verbose)
+            copy_files([self.well_reg_flt_dir], target_dir=self.pred_data_dir, year_list=year_list,
                        pattern_list=[pattern], rep=True, verbose=verbose)
             print('Creating dataframe...')
             gw_file = self.input_ama_ina_reproj_file
@@ -672,7 +683,11 @@ class HydroML:
                             ordering=ordering)
         if post_process:
             output_dir = make_proper_dir_name(self.pred_out_dir + 'Postprocessed')
-            rops.postprocess_rasters(self.pred_out_dir, output_dir, self.well_reg_mask_file)
+            makedirs([output_dir])
+            well_mask = glob(self.well_reg_mask_dir + '*.tif')[0]
+            if use_full_extent:
+                well_mask = self.well_reg_flt_file
+            rops.postprocess_rasters(self.pred_out_dir, output_dir, well_mask)
             self.pred_out_dir = output_dir
         return actual_raster_dir, self.pred_out_dir
 
@@ -855,7 +870,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
     exclude_vars = ('ET', 'WS_PA', 'WS_PA_EA', 'WS_PT', 'WS_PT_ET')
     test_years = range(2010, 2020)
     if build_ml_model:
-        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET', 'WS_PA_EA')
+        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
@@ -886,8 +901,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        load_files = False
-        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=True)
+        # load_files = False
+        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=False)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
@@ -932,7 +947,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
     analyze_only = False
     load_files = True
     load_rf_model = False
-    load_df = False
+    load_df = True
     subsidence_analysis = True
     ama_ina_train = False
     gw_ks, ks_df = None, None

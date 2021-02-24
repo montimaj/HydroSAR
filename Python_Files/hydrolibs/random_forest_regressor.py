@@ -327,8 +327,8 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         drop_columns = [pred_attr] + list(drop_attrs)
         x_train = x_train.drop(columns=drop_columns)
         x_test = x_test.drop(columns=drop_columns)
-        param_grid = [{'n_estimators': [500],  # range(100, n_estimators + 1, 100),
-                       'max_features': range(3, max_features + 1),
+        param_grid = [{'n_estimators': [500],
+                       'max_features': [7],
                        'random_state': [random_state]
                        }]
 
