@@ -15,7 +15,8 @@ class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                  input_state_file, gdal_path, input_ts_dir=None, input_subsidence_dir=None, input_cdl_file=None,
-                 input_gw_boundary_file=None, input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None):
+                 input_gw_boundary_file=None, input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None,
+                 sed_thick_csv=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -86,6 +87,10 @@ class HydroML:
         self.well_reg_flt_file = None
         self.well_reg_flt_dir = None
         self.well_reg_reproj_dir = None
+        self.sed_thick_csv = sed_thick_csv
+        self.sed_thick_dir = None
+        self.sed_thick_shp_file = None
+        self.sed_thick_raster_file = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -366,6 +371,39 @@ class HydroML:
             print('Creating crop coefficient raster...')
             makedirs([self.crop_coeff_dir])
             rops.create_crop_coeff_raster(self.input_cdl_file, output_file=crop_coeff_file)
+
+    def create_sed_thickness_raster(self, xres=5000., yres=5000., already_converted=False, already_clipped=False,
+                                    already_created=False):
+        """
+        Create sediment thickness raster for Arizona
+        :param xres: X-Resolution (map unit)
+        :param yres: Y-Resolution (map unit)
+        :param already_converted: Set True if CSV has already been converted to SHP
+        :param already_clipped: Set True if shapefile has already been reprojected and clipped
+        :param already_created: Set False to re-compute GW pumping rasters
+        :return: None
+        """
+
+        self.sed_thick_dir = make_proper_dir_name(self.file_dir + 'Sed_Thick')
+        self.sed_thick_shp_file = self.sed_thick_dir + 'Sed_Thick.shp'
+        self.sed_thick_raster_file = self.sed_thick_dir + 'Sed_Thick.tif'
+        sed_thick_shp = self.sed_thick_dir + 'Sed_Thick_All.shp'
+        if not already_converted:
+            print('Creating sediment thickness shapefile...')
+            makedirs([self.sed_thick_dir])
+            vops.csv2shp(self.sed_thick_csv, sed_thick_shp, long_lat_pos=(0, 1))
+        if not already_clipped:
+            print('Reprojecting sediment thickness shapefile...')
+            vops.reproject_vector(sed_thick_shp, sed_thick_shp, self.input_state_reproj_file,
+                                  raster=False)
+            print('Clipping sediment thickness shapefile...')
+            vops.clip_vector(sed_thick_shp, self.input_state_reproj_file, self.sed_thick_shp_file,
+                             gdal_path=self.gdal_path, extent_clip=False)
+        if not already_created:
+            print('Creating sediment thickness raster...')
+            rops.create_sed_thickness_raster(self.sed_thick_shp_file, self.sed_thick_raster_file, self.gdal_path,
+                                                 xres, yres)
+        print('Sediment thickness raster created...')
 
     def reclassify_cdl(self, reclass_dict, pattern='*.tif', already_reclassified=False):
         """
@@ -852,6 +890,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
+    sed_thick_csv = input_dir + 'Sediment_Thickness/Sedthick_LLz.csv'
     data_year_list = range(2002, 2021)
     data_start_month = 4
     data_end_month = 9
@@ -882,7 +921,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
                      input_gw_boundary_file=input_well_reg_file, input_ama_ina_file=input_ama_ina_file,
-                     input_watershed_file=input_watershed_file, ssebop_link=ssebop_link)
+                     input_watershed_file=input_watershed_file, ssebop_link=ssebop_link, sed_thick_csv=sed_thick_csv)
         gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
                          already_downloaded=load_files, already_extracted=load_files)
         remove_na = False
@@ -895,8 +934,10 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.reproject_shapefiles(already_reprojected=load_files)
         # load_files = False
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
-        # load_files = False
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
+        load_files = False
+        gw.create_sed_thickness_raster(xres=xres, yres=yres, already_converted=True, already_clipped=True,
+                                       already_created=load_files)
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
@@ -933,6 +974,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
                         forecast_years=(2020,))
         ma.subsidence_analysis(subsidence_gw_dir)
+
     return gw, df
 
 
@@ -946,7 +988,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = False
+    load_rf_model = True
     load_df = True
     subsidence_analysis = True
     ama_ina_train = False

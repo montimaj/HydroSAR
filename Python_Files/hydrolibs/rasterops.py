@@ -1210,3 +1210,29 @@ def postprocess_rasters(input_raster_dir, output_dir, well_registry_raster_file,
         gw_raster_arr[well_reg_arr == 0] = 0
         gw_raster_arr[np.isnan(gw_raster_arr)] = NO_DATA_VALUE
         write_raster(gw_raster_arr, gw_raster_file, transform=gw_raster_file.transform, outfile_path=output_file)
+
+
+def create_sed_thickness_raster(input_sed_thick_shp_file, output_sed_thick_raster, gdal_path, xres=5000., yres=5000.):
+    """
+    Create sediment thickness raster for a particular state
+    :param input_sed_thick_shp_file: Input sediment thickness shapefile
+    :param output_sed_thick_raster: Output sediment thickness raster file name
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param xres: X-Resolution (map unit)
+    :param yres: Y-Resolution (map unit)
+    :return: None
+    """
+
+    output_sed_thick_dir = output_sed_thick_raster[: output_sed_thick_raster.rfind(os.sep) + 1]
+    count_sed_thick_raster = output_sed_thick_dir + 'Count_Sed_Thick.tif'
+    total_sed_thick_raster = output_sed_thick_dir + 'Total_Sed_Thick.tif'
+    shp2raster(input_sed_thick_shp_file, count_sed_thick_raster, xres=xres, yres=yres, smoothing=0,
+               burn_value=1.0, gdal_path=gdal_path, gridding=False)
+    shp2raster(input_sed_thick_shp_file, total_sed_thick_raster, xres=xres, yres=yres, smoothing=0,
+               value_field_pos=2, gdal_path=gdal_path, gridding=False)
+    st_arr, st_file = read_raster_as_arr(total_sed_thick_raster)
+    count_arr = read_raster_as_arr(count_sed_thick_raster, get_file=False)
+    st_arr /= count_arr
+    st_arr[np.isnan(st_arr)] = NO_DATA_VALUE
+    write_raster(st_arr, st_file, transform=st_file.transform, outfile_path=output_sed_thick_raster)
