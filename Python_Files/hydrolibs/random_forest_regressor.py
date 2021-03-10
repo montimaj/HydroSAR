@@ -341,8 +341,8 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         #                                scoring=['neg_root_mean_squared_error'],
         #                                refit='neg_root_mean_squared_error')
         regressor = RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap, n_estimators=500,
-                                          max_features=7, random_state=random_state, max_depth=None, max_samples=0.8,
-                                          min_samples_leaf=1)
+                                          max_features=7, random_state=random_state, max_depth=None,
+                                          max_samples=0.8, min_samples_leaf=1)
         regressor.fit(x_train, y_train)
         pickle.dump(regressor, open(out_dir + 'rf_model', mode='wb'))
 
@@ -368,6 +368,7 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
           'Test_NRMSE': [test_nrmse], 'OOB_Score': [oob_score]}
     if calc_perm_imp:
         df['P_IMP_TRAIN'], df['P_IMP_TEST'] = [permutation_imp_train], [permutation_imp_test]
+    print(x_train.columns)
     print('Model statistics:', df)
     df = pd.DataFrame(data=df)
     with open(out_dir + 'RF_Results.csv', 'a') as f:

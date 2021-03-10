@@ -91,6 +91,9 @@ class HydroML:
         self.sed_thick_dir = None
         self.sed_thick_shp_file = None
         self.sed_thick_raster_file = None
+        self.sed_thick_reproj_dir = None
+        self.watershed_raster_dir = None
+        self.watershed_raster_reproj_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -321,6 +324,25 @@ class HydroML:
                             burn_value=1.0, gdal_path=self.gdal_path, gridding=False)
         print('Well registry raster created...')
 
+    def create_watershed_raster(self, xres=5000., yres=5000., already_created=False):
+        """
+        Create watershed raster for Arizona
+        :param xres: X-Resolution (map unit)
+        :param yres: Y-Resolution (map unit)
+        :param already_created: Set True if raster already exists
+        :return: None
+        """
+
+        self.watershed_raster_dir = make_proper_dir_name(self.file_dir + 'Watershed_Raster')
+        if not already_created:
+            print('Creating watershed raster...')
+            makedirs([self.watershed_raster_dir])
+            watershed_raster_file = self.watershed_raster_dir + 'Watershed.tif'
+            vops.shp2raster(self.input_watershed_reproj_file, watershed_raster_file, xres=xres, yres=yres,
+                            smoothing=0, value_field='OBJECTID', add_value=False, gdal_path=self.gdal_path,
+                            gridding=False)
+        print('Well registry raster created...')
+
     def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
                           convert_units=True, already_created=True):
         """
@@ -461,16 +483,22 @@ class HydroML:
         self.ws_ssebop_reproj_dir = self.file_dir + 'WS_SSEBop_Reproj_Rasters/'
         self.crop_coeff_reproj_dir = self.crop_coeff_dir + 'Crop_Coeff_Reproj/'
         self.well_reg_reproj_dir = self.well_reg_dir + 'Well_Reg_Reproj/'
-
+        self.sed_thick_reproj_dir = self.sed_thick_dir + 'Reproj/'
+        self.watershed_raster_reproj_dir = self.watershed_raster_dir + 'Reproj/'
         if not already_reprojected:
             print('Reprojecting rasters...')
-            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir])
+            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir,
+                      self.sed_thick_reproj_dir, self.watershed_raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster,
                                    outdir=self.crop_coeff_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.well_reg_dir, ref_raster=self.ref_raster,
                                    outdir=self.well_reg_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.sed_thick_dir, ref_raster=self.ref_raster, outdir=self.sed_thick_reproj_dir,
+                                   pattern='Sed_Thick.tif', gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.watershed_raster_dir, ref_raster=self.ref_raster,
+                                   outdir=self.watershed_raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
@@ -742,9 +770,11 @@ class HydroML:
         self.subsidence_pred_gw_dir = make_proper_dir_name(self.output_dir + 'Subsidence_Analysis')
         if not already_created:
             makedirs([self.subsidence_pred_gw_dir])
-            rops.create_subsidence_pred_gw_rasters(self.pred_out_dir, self.converted_subsidence_dir,
-                                                   self.subsidence_pred_gw_dir, scale_to_cm=scale_to_cm,
-                                                   verbose=verbose)
+            sed_thick_raster = glob(self.sed_thick_reproj_dir + '*.tif')[0]
+            watershed_raster = glob(self.watershed_raster_reproj_dir + '*.tif')[0]
+            rops.create_subsidence_pred_gw_rasters(self.pred_out_dir, self.converted_subsidence_dir, sed_thick_raster,
+                                                   watershed_raster, self.subsidence_pred_gw_dir,
+                                                   scale_to_cm=scale_to_cm, verbose=verbose)
         print('Subsidence and total predicted GW rasters created!')
 
     def crop_final_gw_rasters(self, actual_gw_dir, pred_gw_dir, test_years, already_cropped=False):
@@ -935,14 +965,13 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         # load_files = False
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
-        load_files = False
         gw.create_sed_thickness_raster(xres=xres, yres=yres, already_converted=True, already_clipped=True,
                                        already_created=load_files)
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
+        gw.create_watershed_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        # load_files = False
         gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=False)
         if build_ml_model:
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
@@ -953,7 +982,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                                  load_df=load_df, remove_na=remove_na)
         if build_ml_model:
             dattr = list(drop_attrs) + ['GW_NAME']
-            max_features = len(df.columns.values.tolist()) - len(dattr) - 1
+            max_features = len(df.columns.values.tolist()) - len(dattr) - 2
             rf_model = gw.build_model(df, n_estimators=1000, test_year=test_years, drop_attrs=dattr,
                                       pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
                                       plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina)
@@ -963,7 +992,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                                                             only_pred=False, use_full_extent=subsidence_analysis,
                                                             post_process=False)
             if subsidence_analysis:
-                gw.create_subsidence_pred_gw_rasters(already_created=load_files)
+                gw.create_subsidence_pred_gw_rasters(already_created=False)
 
     if build_ml_model:
         input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
