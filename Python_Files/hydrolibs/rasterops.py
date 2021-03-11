@@ -1069,25 +1069,17 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, s
                          outfile_path=subsidence_gw_dir + subsidence_raster_name)
         out_raster = subsidence_gw_dir + 'TS_' + start_year + '_' + end_year + '.tif'
         mean_subsidence_raster = total_subsidence_raster / num_years
-        tpgw_sub_ratio = total_subsidence_raster / tpgw_raster
-        tpgw_sub_ratio[np.isinf(tpgw_sub_ratio)] = np.nan
-        tpgw_sub_ratio_2 = tpgw_sub_ratio.copy()
-        tpgw_sub_ratio[np.isnan(tpgw_sub_ratio)] = NO_DATA_VALUE
+        ts_raster = total_subsidence_raster.copy()
         total_subsidence_raster[tpgw_nan_pos] = NO_DATA_VALUE
         mean_subsidence_raster[tpgw_nan_pos] = NO_DATA_VALUE
         write_raster(total_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
         out_raster = subsidence_gw_dir + 'MS_' + start_year + '_' + end_year + '.tif'
         write_raster(mean_subsidence_raster, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
-        out_raster = subsidence_gw_dir + 'TPGW_TS_Ratio_' + start_year + '_' + end_year + '.tif'
-        write_raster(tpgw_sub_ratio, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
-        tpgw_sub_ratio_watershed = np.full_like(tpgw_sub_ratio_2, fill_value=np.nan, dtype=tpgw_sub_ratio_2.dtype)
+        tpgw_sub_ratio_watershed = np.full_like(tpgw_raster, fill_value=np.nan, dtype=tpgw_raster.dtype)
         for watershed_val in set(watershed_arr[~np.isnan(watershed_arr)]):
             pos = np.where(watershed_arr == watershed_val)
-            tpgw_values = tpgw_sub_ratio_2[pos][~np.isnan(tpgw_sub_ratio_2[pos])]
-            if tpgw_values.size > 0:
-                tpgw_sub_ratio_watershed[pos] = np.mean(tpgw_values)
-            if start_year == '2010' and end_year == '2019' and watershed_val == 13:
-                print(tpgw_values[tpgw_values > 0])
+            tpgw_sub_ratio_watershed[pos] = np.nanmean(ts_raster[pos]) / np.nanmean(tpgw_raster[pos])
+        tpgw_sub_ratio_watershed[np.isinf(tpgw_sub_ratio_watershed)] = np.nan
         tpgw_sub_ratio_watershed[np.isnan(tpgw_sub_ratio_watershed)] = NO_DATA_VALUE
         out_raster = subsidence_gw_dir + 'TPGW_TS_Ratio_Watershed_' + start_year + '_' + end_year + '.tif'
         write_raster(tpgw_sub_ratio_watershed, ref_pred_file, transform=ref_pred_file.transform,
