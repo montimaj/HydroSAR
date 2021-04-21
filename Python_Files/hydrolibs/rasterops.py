@@ -83,7 +83,7 @@ def write_raster(raster_data, raster_file, transform, outfile_path, no_data_valu
 
 
 def crop_raster(input_raster_file, input_mask_path, outfile_path, plot_fig=False, plot_title="", ext_mask=True,
-                gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
+                gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=False):
     """
     Crop raster data based on given shapefile
     :param input_raster_file: Input raster dataset path
@@ -381,7 +381,7 @@ def reproject_raster(input_raster_file, outfile_path, resampling_factor=1, resam
 
 
 def crop_rasters(input_raster_dir, input_mask_file, outdir, pattern='*.tif', ext_mask=True,
-                 gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
+                 gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=False):
     """
     Crop multiple rasters in a directory
     :param input_raster_dir: Directory containing raster files which are named as *_<Year>.*
@@ -403,7 +403,7 @@ def crop_rasters(input_raster_dir, input_mask_file, outdir, pattern='*.tif', ext
 
 
 def parallel_crop_rasters(input_raster_file, input_mask_file, outdir, ext_mask=True,
-                          gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=True):
+                          gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', multi_poly=False, verbose=False):
     """
     Parallely crop rasters, should be called from #crop_rasters(...)
     :param input_raster_file: Input raster file
@@ -418,7 +418,8 @@ def parallel_crop_rasters(input_raster_file, input_mask_file, outdir, ext_mask=T
     """
 
     out_raster = outdir + input_raster_file[input_raster_file.rfind(os.sep) + 1:]
-    print('Cropping', input_raster_file, '...')
+    if verbose:
+        print('Cropping', input_raster_file, '...')
     crop_raster(input_raster_file, input_mask_file, out_raster, ext_mask=ext_mask, gdal_path=gdal_path,
                 multi_poly=multi_poly, verbose=verbose)
 
@@ -1194,7 +1195,7 @@ def get_gw_info_arr(input_raster_file, input_gw_shp_file, output_dir, label_attr
     gw_out = output_dir + 'GW_Info.npy'
     if os.path.isfile(gw_out) and load_gw_info:
         print('GW Info Array already present..loading...')
-        return np.load(gw_out)
+        return np.load(gw_out, allow_pickle=True)
     raster_arr, raster_file = read_raster_as_arr(input_raster_file)
     gw_shp = gpd.read_file(input_gw_shp_file)
     gw_arr = np.full(raster_arr.shape, fill_value='OTHER', dtype=np.object)

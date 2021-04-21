@@ -182,10 +182,10 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     df1.set_index('YEAR').plot(ax=ax1)
     df2.set_index('DT').plot(ax=ax2)
     df2_years = list(df2.DT)
-    ax1.axvspan(2010.5, 2019.5, color='#a6bddb', alpha=0.6)
+    ax1.axvspan(2009.8, 2019.2, color='#a6bddb', alpha=0.6)
     min_forecast_yr = min(forecast_years)
     ax1.set_xlim(left=np.min(df1.YEAR) - 0.1, right=np.max(df1.YEAR) + 0.1)
-    ax1.axvspan(min_forecast_yr - 0.5, np.max(df1.YEAR) + 0.1, color='#fee8c8', alpha=1)
+    ax1.axvspan(2019.21, 2020.1, color='#fee8c8', alpha=1)
     ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.12, 1),
                labels=['Actual GW', 'Predicted GW', 'Test Years', 'Forecast'])
     ax1.set_ylabel('Mean GW Pumping (mm)')
@@ -223,10 +223,10 @@ def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, forecast_ye
         fig.suptitle(plot_title)
         df = gw_df[gw_df.GW_NAME == gw]
         df.set_index('YEAR').plot(ax=ax1)
-        ax1.axvspan(2010.5, 2018.5, color='#a6bddb', alpha=0.6)
+        ax1.axvspan(2009.8, 2019.2, color='#a6bddb', alpha=0.6)
         min_forecast_yr = min(forecast_years)
         ax1.set_xlim(left=np.min(df.YEAR) - 0.1, right=np.max(df.YEAR) + 0.1)
-        ax1.axvspan(min_forecast_yr - 0.5, np.max(df.YEAR) + 0.1, color='#fee8c8', alpha=1)
+        ax1.axvspan(2019.21, 2020.1, color='#fee8c8', alpha=1)
         ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
                    labels=['Actual GW: ' + gw, 'Predicted GW: ' + gw, 'Test Years', 'Forecast'])
         ax1.set_ylabel('Mean GW Pumping (mm)')

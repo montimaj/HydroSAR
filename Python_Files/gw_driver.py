@@ -621,7 +621,7 @@ class HydroML:
             print('All rasters already masked')
 
     def create_dataframe(self, year_list, column_names=None, ordering=False, load_df=False, exclude_vars=(),
-                         exclude_years=(2019, ), pattern='*.tif', verbose=True, remove_na=True):
+                         exclude_years=(2019, ), pattern='*.tif', verbose=False, remove_na=True, load_gw_info=False):
         """
         Create dataframe from preprocessed files
         :param year_list: List of years for which the dataframe will be created
@@ -633,6 +633,8 @@ class HydroML:
         :param pattern: File pattern
         :param verbose: Get extra information if set to True
         :param remove_na: Set False to disable NA removal
+        :param load_gw_info: Set True to load previously created GWinfo raster containing the name of the GMD (Kansas) or
+        AMA/INA (Arizona) regions
         :return: Pandas dataframe object
         """
 
@@ -676,7 +678,7 @@ class HydroML:
             df = rfr.create_dataframe(self.rf_data_dir, input_gw_file=gw_file, output_dir=self.output_dir,
                                       label_attr=label_attr, column_names=column_names, make_year_col=True,
                                       exclude_vars=exclude_vars, exclude_years=exclude_years, ordering=ordering,
-                                      load_gw_info=load_df, remove_na=remove_na)
+                                      load_gw_info=load_gw_info, remove_na=remove_na)
             return df
 
     def build_model(self, df, n_estimators=100, random_state=0, bootstrap=True, max_features=3, test_size=None,
@@ -943,7 +945,7 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('DIN',)
+    test_ama_ina = ('HAR',)
     xres, yres = 2000, 2000
     df = pd.DataFrame()
     gw = None
@@ -972,25 +974,29 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_watershed_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(3, 5, 3), post_process=False)
-        if build_ml_model:
-            gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
-            if subsidence_analysis:
-                gw.organize_subsidence_rasters(already_organized=load_files)
-        gw.mask_rasters(already_masked=load_files)
-        df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(2020,),
-                                 load_df=load_df, remove_na=remove_na)
-        if build_ml_model:
-            dattr = list(drop_attrs) + ['GW_NAME']
-            max_features = len(df.columns.values.tolist()) - len(dattr) - 2
-            rf_model = gw.build_model(df, n_estimators=1000, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
-                                      plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina)
-            actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
-                                                            drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                            exclude_vars=exclude_vars, exclude_years=(2020,),
-                                                            only_pred=False, use_full_extent=subsidence_analysis,
-                                                            post_process=False)
+        load_files = True
+        load_gw_info = True
+        for sf in range(5, 6):
+            gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf), post_process=False)
+            if build_ml_model:
+                gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
+                if subsidence_analysis:
+                    gw.organize_subsidence_rasters(already_organized=load_files)
+            gw.mask_rasters(already_masked=load_files)
+            df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(2020,),
+                                     load_df=load_df, remove_na=remove_na, load_gw_info=load_gw_info)
+            load_gw_info = True
+            if build_ml_model:
+                dattr = list(drop_attrs) + ['GW_NAME']
+                max_features = len(df.columns.values.tolist()) - len(dattr) - 2
+                rf_model = gw.build_model(df, n_estimators=1000, test_year=test_years, drop_attrs=dattr,
+                                          pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
+                                          plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina)
+                actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
+                                                                drop_attrs=drop_attrs, pred_attr=pred_attr,
+                                                                exclude_vars=exclude_vars, exclude_years=(2020,),
+                                                                only_pred=False, use_full_extent=subsidence_analysis,
+                                                                post_process=False)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=False)
 
@@ -1017,9 +1023,9 @@ def run_gw(build_individual_model=False, run_only_az=True):
 
     analyze_only = False
     load_files = True
-    load_rf_model = True
-    load_df = True
-    subsidence_analysis = True
+    load_rf_model = False
+    load_df = False
+    subsidence_analysis = False
     ama_ina_train = False
     gw_ks, ks_df = None, None
     if not run_only_az:
@@ -1038,7 +1044,7 @@ def run_gw(build_individual_model=False, run_only_az=True):
         pred_attr = 'GW'
         max_features = len(final_gw_df.columns.tolist()) - len(drop_attrs) - 1
         gw = HydroML(None, None, output_dir, None, None, None, None)
-        rf_model = gw.build_model(final_gw_df, n_estimators=500, test_year=range(2011, 2019), drop_attrs=drop_attrs,
+        rf_model = gw.build_model(final_gw_df, n_estimators=500, test_year=range(2010, 2019), drop_attrs=drop_attrs,
                                   pred_attr=pred_attr, load_model=False, max_features=max_features, plot_graphs=False)
         actual_gw_dir, pred_gw_dir = gw_ks.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
                                                            drop_attrs=drop_attrs, exclude_vars=exclude_vars,

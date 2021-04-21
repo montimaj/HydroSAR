@@ -342,7 +342,7 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         #                                refit='neg_root_mean_squared_error')
         regressor = RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap, n_estimators=500,
                                           max_features=7, random_state=random_state, max_depth=None,
-                                          max_samples=0.8, min_samples_leaf=1)
+                                          max_samples=None, min_samples_leaf=1e-5)
         regressor.fit(x_train, y_train)
         pickle.dump(regressor, open(out_dir + 'rf_model', mode='wb'))
 
