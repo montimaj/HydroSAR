@@ -169,7 +169,7 @@ def create_time_series_plot(input_df_list):
 
 def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plot_title=''):
     """
-    Create time series plot
+    Create time series plot (Note: the visualization is hardcoded, needs to be changed in future versions)
     :param input_df_list: Input data frames as constructed from #create_gw_time_series
     :param forecast_years: The line color changes for these years
     :param plot_title: Plot title
@@ -209,7 +209,8 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
 
 def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, forecast_years=(2019, ), plot_title=''):
     """
-    Create time series plot considering all GMDs
+    Create time series plot considering all GMDs (Note: the visualization is hardcoded, needs to be changed in
+    future versions)
     :param input_df_list: Input data frames as constructed from #create_gw_time_series
     :param gw_name_list: GMD or AMA/INA labels
     :param forecast_years: The line color changes for these years
@@ -312,7 +313,8 @@ def calculate_gw_stats(gw_df, gw_name_list, out_dir, train_end=2010, test_start=
 
 
 def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=None, use_gws=True,
-                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif', exclude_years=(), forecast_years=()):
+                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif', exclude_years=(), forecast_years=(),
+                 show_plots=True):
     """
     Run model analysis to get actual vs predicted graph along with GRACE TWSA variations
     :param actual_gw_dir: Directory containing the actual data
@@ -326,6 +328,7 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
     :param pred_gw_pattern: Predicted GW pumping raster file pattern
     :param exclude_years: Exclude these years from analysis
     :param forecast_years: Set these years as forecast years
+    :param show_plots: Set True to show plots
     :return: None
     """
 
@@ -337,7 +340,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
                                                use_gws=use_gws, exclude_years=exclude_years,
                                                forecast_years=forecast_years)
         ts_df = ts_df[0], ts_df[2]
-        create_time_series_forecast_plot(ts_df)
+        if show_plots:
+            create_time_series_forecast_plot(ts_df)
     else:
         actual_gw_dir_list, pred_gw_dir_list, gw_name_list = preprocess_gws(actual_gw_dir, pred_gw_dir,
                                                                               input_gw_file, out_dir,
@@ -350,7 +354,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
 
         print(calculate_gw_stats(ts_df[1], gw_name_list, out_dir))
         ts_df = ts_df[0], ts_df[2]
-        create_gw_time_series_forecast_plot(ts_df, gw_name_list=gw_name_list)
+        if show_plots:
+            create_gw_time_series_forecast_plot(ts_df, gw_name_list=gw_name_list)
 
 
 def generate_feature_box_plots(input_csv_file, year_col='YEAR', temporal_features=('ET', 'P'), pred_attr='GW',

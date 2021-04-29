@@ -158,7 +158,7 @@ def split_data_train_test_ratio(input_df, pred_attr='GW', shuffle=True, random_s
 
 
 def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016, ), test_gws=('DIN',),
-                         use_gws=False, shuffle=True, random_state=0):
+                         use_gws=False, shuffle=True, random_state=0, spatio_temporal=False):
     """
     Split data based on a particular attribute like year or GMD
     :param input_df: Input dataframe
@@ -169,6 +169,7 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
     :param use_gws: Set True to build test data from only test_gws
     :param shuffle: Set False to stop data shuffling
     :param random_state: Seed for PRNG
+    :param spatio_temporal: Set True to build test from both test_years and test_gws
     :return: X_train, X_test, y_train, y_test
     """
 
@@ -176,8 +177,6 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
     gws = set(input_df['GW_NAME'])
     x_train_df = pd.DataFrame()
     x_test_df = pd.DataFrame()
-    y_train_df = pd.DataFrame()
-    y_test_df = pd.DataFrame()
     selection_var = years
     selection_label = 'YEAR'
     test_vars = test_years
@@ -187,15 +186,18 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
         test_vars = test_gws
     for svar in selection_var:
         selected_data = input_df.loc[input_df[selection_label] == svar]
-        y_t = selected_data[pred_attr]
         x_t = selected_data
         if svar not in test_vars:
             x_train_df = x_train_df.append(x_t)
-            y_train_df = pd.concat([y_train_df, y_t])
         else:
             x_test_df = x_test_df.append(x_t)
-            y_test_df = pd.concat([y_test_df, y_t])
-
+    if spatio_temporal:
+        for year in test_years:
+            x_test_new = x_train_df.loc[x_train_df['YEAR'] == year]
+            x_test_df = x_test_df.append(x_test_new)
+            x_train_df = x_train_df.loc[x_train_df['YEAR'] != year]
+    y_train_df = x_train_df[pred_attr]
+    y_test_df = x_test_df[pred_attr]
     if shuffle:
         x_train_df = sk.shuffle(x_train_df, random_state=random_state)
         y_train_df = sk.shuffle(y_train_df, random_state=random_state)
@@ -208,7 +210,7 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
         y_train_df.to_csv(outdir + 'Y_Train.csv', index=False)
         y_test_df.to_csv(outdir + 'Y_Test.csv', index=False)
 
-    return x_train_df, x_test_df, y_train_df[0].ravel(), y_test_df[0].ravel()
+    return x_train_df, x_test_df, y_train_df.to_numpy().ravel(), y_test_df.to_numpy().ravel()
 
 
 def create_pdplots(x_train, rf_model, outdir, plot_3d=False, descriptive_labels=False):
@@ -274,7 +276,7 @@ def create_pdplots(x_train, rf_model, outdir, plot_3d=False, descriptive_labels=
 def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=True, max_features=None, test_size=0.2,
                  pred_attr='GW', shuffle=True, plot_graphs=False, plot_3d=False, plot_dir=None, drop_attrs=(),
                  test_case='', test_year=None, test_gw=None, use_gw=False, split_attribute=True, load_model=True,
-                 calc_perm_imp=False):
+                 calc_perm_imp=False, spatio_temporal=False):
     """
     Perform random forest regression
     :param input_df: Input pandas dataframe
@@ -299,6 +301,7 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
     :param split_attribute: Split train test data based on a particular attribute like year or GMD
     :param load_model: Load an earlier pre-trained RF model
     :param calc_perm_imp: Set True to get permutation importances on train and test data
+    :param spatio_temporal: Set True to build test from both test_years and test_gws
     :return: Random forest model
     """
 
@@ -323,7 +326,7 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
             x_train, x_test, y_train, y_test = split_data_attribute(input_df, pred_attr=pred_attr, outdir=out_dir,
                                                                     test_years=test_year, shuffle=shuffle,
                                                                     random_state=random_state, test_gws=test_gw,
-                                                                    use_gws=use_gw)
+                                                                    use_gws=use_gw, spatio_temporal=spatio_temporal)
         drop_columns = [pred_attr] + list(drop_attrs)
         x_train = x_train.drop(columns=drop_columns)
         x_test = x_test.drop(columns=drop_columns)
@@ -340,8 +343,8 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         #                                cv=2,
         #                                scoring=['neg_root_mean_squared_error'],
         #                                refit='neg_root_mean_squared_error')
-        regressor = RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap, n_estimators=500,
-                                          max_features=7, random_state=random_state, max_depth=None,
+        regressor = RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap, n_estimators=n_estimators,
+                                          max_features=max_features, random_state=random_state, max_depth=None,
                                           max_samples=None, min_samples_leaf=1e-5)
         regressor.fit(x_train, y_train)
         pickle.dump(regressor, open(out_dir + 'rf_model', mode='wb'))

@@ -683,7 +683,8 @@ class HydroML:
 
     def build_model(self, df, n_estimators=100, random_state=0, bootstrap=True, max_features=3, test_size=None,
                     pred_attr='GW', shuffle=False, plot_graphs=False, plot_3d=False, drop_attrs=(), test_year=(2012,),
-                    test_gw=('DIN',), use_gw=False, split_attribute=True, load_model=False, calc_perm_imp=False):
+                    test_gw=('DIN',), use_gw=False, split_attribute=True, load_model=False, calc_perm_imp=False,
+                    spatio_temporal=False):
         """
         Build random forest model
         :param df: Input pandas dataframe object
@@ -706,6 +707,7 @@ class HydroML:
         :param split_attribute: Split train test data based on years
         :param load_model: Load an earlier pre-trained RF model
         :param calc_perm_imp: Set True to get permutation importances on train and test data
+        :param spatio_temporal: Set True to build test from both test_years and test_gws
         :return: Fitted RandomForestRegressor object
         """
 
@@ -717,7 +719,7 @@ class HydroML:
                                     use_gw=use_gw, shuffle=shuffle, plot_graphs=plot_graphs, plot_3d=plot_3d,
                                     split_attribute=split_attribute, bootstrap=bootstrap, plot_dir=plot_dir,
                                     max_features=max_features, load_model=load_model, test_size=test_size,
-                                    calc_perm_imp=calc_perm_imp)
+                                    calc_perm_imp=calc_perm_imp, spatio_temporal=spatio_temporal)
         return rf_model
 
     def get_predictions(self, rf_model, pred_years, column_names=None, ordering=False, pred_attr='GW',
@@ -799,108 +801,18 @@ class HydroML:
         return actual_gw_dir, pred_gw_dir
 
 
-def run_gw_ks(analyze_only=False, load_files=True, load_rf_model=False, use_gmds=True, show_box_plots=False,
-              load_df=False, show_train_test_box_plots=False, build_ml_model=True):
-    """
-    Main function for running the project, some variables require to be hardcoded
-    :param analyze_only: Set True to just produce analysis results, all required files must be present
-    :param load_files: Set True to load existing files, needed only if analyze_only=False
-    :param load_rf_model: Set True to load existing Random Forest model, needed only if analyze_only=False
-    :param use_gmds: Set False to use entire GW raster for analysis
-    :param show_box_plots: Set True to display box plots of features
-    :param load_df: Set True to load existing dataframe from CSV
-    :param show_train_test_box_plots: Set True to show box plots of predictors for train and test data separately
-    :param build_ml_model: Set False to disable model building. If True, MOD16 will be used instead of SSEBop as it is a
-    better predictor for Kansas
-    :return: Returns HydroML object and Pandas dataframe
-    """
-
-    gee_data = ['Apr_Sept/', 'Apr_Aug/', 'Annual/']
-    input_dir = '../Inputs/Data/Kansas_GW/'
-    file_dir = '../Inputs/Files_KS_' + gee_data[0]
-    output_dir = '../Outputs/Output_KS_' + gee_data[0]
-    output_shp_dir = file_dir + 'GW_Shapefiles/'
-    output_gw_raster_dir = file_dir + 'GW_Rasters/'
-    input_gmd_file = input_dir + 'gmds/ks_gmds.shp'
-    input_gdb_dir = input_dir + 'ks_pd_data_updated2018.gdb'
-    input_state_file = input_dir + 'Kansas/kansas.shp'
-    gdal_path = 'C:/OSGeo4W64/'
-    gw_dir = file_dir + 'RF_Data/'
-    pred_gw_dir = output_dir + 'Predicted_Rasters/'
-    grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
-    ks_class_dict = {(0, 59.5): 1,
-                     (66.5, 77.5): 1,
-                     (203.5, 255): 1,
-                     (110.5, 111.5): 2,
-                     (111.5, 112.5): 0,
-                     (120.5, 124.5): 3,
-                     (59.5, 61.5): 0,
-                     (130.5, 195.5): 0
-                     }
-    exclude_vars = ('ET',)
-    if build_ml_model:
-        exclude_vars = ('SSEBop',)
-    drop_attrs = ('YEAR',)
-    pred_attr = 'GW'
-    ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
-                  'downloads/'
-    data_year_list = range(2002, 2020)
-    data_start_month = 4
-    data_end_month = 9
-    df = pd.DataFrame()
-    gw = None
-    if not analyze_only:
-        gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir, input_state_file,
-                     gdal_path, input_gw_boundary_file=input_gmd_file, ssebop_link=ssebop_link)
-        gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
-                         already_downloaded=load_files, already_extracted=load_files)
-        gw.extract_shp_from_gdb(input_gdb_dir, year_list=range(2002, 2019), already_extracted=load_files)
-        gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files)
-        gw.reclassify_cdl(ks_class_dict, already_reclassified=load_files)
-        gw.create_crop_coeff_raster(already_created=load_files)
-        gw.reproject_rasters(already_reprojected=load_files)
-        gw.create_land_use_rasters(already_created=load_files)
-        gw.mask_rasters(already_masked=load_files)
-        remove_na = True
-        if not build_ml_model:
-            remove_na = False
-        df = gw.create_dataframe(year_list=range(2002, 2020), exclude_vars=exclude_vars, load_df=load_df,
-                                 remove_na=remove_na)
-        if build_ml_model:
-            max_features = len(df.columns.values.tolist()) - len(drop_attrs) - 1
-            rf_model = gw.build_model(df, n_estimators=500, test_year=range(2011, 2019), drop_attrs=drop_attrs,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
-                                      plot_graphs=False)
-            actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
-                                                            drop_attrs=drop_attrs[:1] + exclude_vars,
-                                                            pred_attr=pred_attr, only_pred=False)
-    if build_ml_model:
-        input_gmd_file = file_dir + 'gmds/reproj/input_gmd_reproj.shp'
-        ma.run_analysis(gw_dir, pred_gw_dir, grace_csv, use_gws=use_gmds, out_dir=output_dir,
-                        input_gw_file=input_gmd_file)
-        if show_box_plots:
-            ma.generate_feature_box_plots(output_dir + '/raster_df.csv')
-        if show_train_test_box_plots:
-            ma.generate_feature_box_plots(output_dir + 'X_Train.csv')
-            ma.generate_feature_box_plots(output_dir + 'X_Test.csv')
-    return gw, df
-
-
-def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=False, build_ml_model=True,
-              subsidence_analysis=False, ama_ina_train=False):
+def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=False, subsidence_analysis=False,
+           ama_ina_train=False):
     """
     Main function for running the project for Arizona, some variables require to be hardcoded
     :param analyze_only: Set True to just produce analysis results, all required files must be present
     :param load_files: Set True to load existing files, needed only if analyze_only=False
     :param load_rf_model: Set True to load existing Random Forest model, needed only if analyze_only=False
     :param load_df: Set True to load existing dataframe from CSV
-    :param build_ml_model: Set False to disable model building. If True, watershed stress index rasters will be computed
-    as it is a useful predictor in Arizona
     :param subsidence_analysis: Set True to analyze total subsidence and total groundwater withdrawals in a
     specified period, build_ml_model must be True
     :param ama_ina_train: Set True to train and test on specific AMA/INA regions
-    :return: Returns HydroML object and Pandas dataframe if build_model=False, None otherwise
+    :return: None
     """
 
     gee_data = ['Apr_Sept/', 'Apr_Aug/', 'Annual/']
@@ -938,17 +850,13 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                      (130.5, 195.5): 0
                      }
     drop_attrs = ('YEAR',)
-    exclude_vars = ('ET', 'WS_PA', 'WS_PA_EA', 'WS_PT', 'WS_PT_ET')
-    test_years = range(2010, 2020)
-    if build_ml_model:
-        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET',)
+    test_years = range(2012, 2020)
+    exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('HAR',)
+    test_ama_ina = ('SCA',)
     xres, yres = 2000, 2000
-    df = pd.DataFrame()
-    gw = None
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
@@ -956,11 +864,8 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
                      input_watershed_file=input_watershed_file, ssebop_link=ssebop_link, sed_thick_csv=sed_thick_csv)
         gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
                          already_downloaded=load_files, already_extracted=load_files)
-        remove_na = False
-        if build_ml_model:
-            remove_na = True
-            gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
-                                already_downloaded=load_files, already_extracted=load_files)
+        gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
+                            already_downloaded=load_files, already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
@@ -974,92 +879,41 @@ def run_gw_az(analyze_only=False, load_files=True, load_rf_model=False, load_df=
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_watershed_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        load_files = True
+        # load_files = False
         load_gw_info = True
         for sf in range(5, 6):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf), post_process=False)
-            if build_ml_model:
-                gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
-                if subsidence_analysis:
-                    gw.organize_subsidence_rasters(already_organized=load_files)
+            gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
+            if subsidence_analysis:
+                gw.organize_subsidence_rasters(already_organized=load_files)
             gw.mask_rasters(already_masked=load_files)
             df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(2020,),
-                                     load_df=load_df, remove_na=remove_na, load_gw_info=load_gw_info)
+                                     load_df=load_df, load_gw_info=load_gw_info)
             load_gw_info = True
-            if build_ml_model:
-                dattr = list(drop_attrs) + ['GW_NAME']
-                max_features = len(df.columns.values.tolist()) - len(dattr) - 2
-                rf_model = gw.build_model(df, n_estimators=1000, test_year=test_years, drop_attrs=dattr,
-                                          pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
-                                          plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina)
-                actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
-                                                                drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                                exclude_vars=exclude_vars, exclude_years=(2020,),
-                                                                only_pred=False, use_full_extent=subsidence_analysis,
-                                                                post_process=False)
+            dattr = list(drop_attrs) + ['GW_NAME']
+            max_features = 7
+            rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
+                                      plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
+                                      spatio_temporal=True)
+            actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
+                                                            drop_attrs=drop_attrs, pred_attr=pred_attr,
+                                                            exclude_vars=exclude_vars, exclude_years=(2020,),
+                                                            only_pred=False, use_full_extent=subsidence_analysis,
+                                                            post_process=False)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=False)
-
-    if build_ml_model:
-        input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
-                        out_dir=output_dir, forecast_years=(2020,))
-        actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, already_cropped=load_rf_model,
-                                                              test_years=test_years)
+            input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
+            ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
+                            out_dir=output_dir, forecast_years=(2020,), show_plots=False)
+            actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
+                                                                  already_cropped=load_rf_model,
+                                                                  test_years=test_years)
         ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
                         forecast_years=(2020,))
         ma.subsidence_analysis(subsidence_gw_dir)
 
-    return gw, df
 
-
-def run_gw(build_individual_model=False, run_only_az=True):
-    """
-    Main caller function for Kansas and Arizona. This will build the ML model using both Kansas and Arizona data.
-    :param build_individual_model: Set True to build individual models for Kansas and Arizona and analyze results.
-    :param run_only_az: Set False to run both Kansas and Arizona models. If True, build_individual_model must be True
-    :return: None
-    """
-
-    analyze_only = False
-    load_files = True
-    load_rf_model = False
-    load_df = False
-    subsidence_analysis = False
-    ama_ina_train = False
-    gw_ks, ks_df = None, None
-    if not run_only_az:
-        gw_ks, ks_df = run_gw_ks(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                                 use_gmds=False, build_ml_model=build_individual_model, load_df=load_df)
-    gw_az, az_df = run_gw_az(analyze_only=analyze_only, load_files=load_files, load_rf_model=load_rf_model,
-                             build_ml_model=build_individual_model, subsidence_analysis=subsidence_analysis,
-                             load_df=load_df, ama_ina_train=ama_ina_train)
-    if not build_individual_model:
-        final_gw_df = ks_df.append(az_df)
-        output_dir = '../Outputs/All_Data/'
-        final_gw_df.to_csv(output_dir + 'GW_DF_KS_AZ.csv', index=False)
-        final_gw_df = final_gw_df.dropna(axis=0)
-        drop_attrs = ('YEAR',)
-        exclude_vars = ('ET',)
-        pred_attr = 'GW'
-        max_features = len(final_gw_df.columns.tolist()) - len(drop_attrs) - 1
-        gw = HydroML(None, None, output_dir, None, None, None, None)
-        rf_model = gw.build_model(final_gw_df, n_estimators=500, test_year=range(2010, 2019), drop_attrs=drop_attrs,
-                                  pred_attr=pred_attr, load_model=False, max_features=max_features, plot_graphs=False)
-        actual_gw_dir, pred_gw_dir = gw_ks.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
-                                                           drop_attrs=drop_attrs, exclude_vars=exclude_vars,
-                                                           pred_attr=pred_attr, only_pred=False)
-        grace_csv = '../Inputs/Data/Kansas_GW/GRACE/TWS_GRACE.csv'
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, input_gw_file=None, out_dir=output_dir,
-                        forecast_years=(2019,))
-        exclude_vars = ('ET', 'WS_PA', 'WS_PA_EA', 'WS_PT', 'WS_PT_ET')
-        actual_gw_dir, pred_gw_dir = gw_az.get_predictions(rf_model=rf_model, pred_years=range(2002, 2020),
-                                                           drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                           exclude_vars=exclude_vars, exclude_years=(),
-                                                           only_pred=False, use_full_extent=True)
-        grace_csv = '../Inputs/Data/Arizona_GW/GRACE/TWS_GRACE.csv'
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, input_gw_file=None, out_dir=output_dir,
-                        forecast_years=(2019,))
-
-
-run_gw(build_individual_model=True, run_only_az=True)
+if __name__ == '__main__':
+    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
+           ama_ina_train=True)
