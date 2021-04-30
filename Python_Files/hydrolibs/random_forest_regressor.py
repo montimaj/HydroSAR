@@ -191,7 +191,7 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
             x_train_df = x_train_df.append(x_t)
         else:
             x_test_df = x_test_df.append(x_t)
-    if spatio_temporal:
+    if spatio_temporal and use_gws:
         for year in test_years:
             x_test_new = x_train_df.loc[x_train_df['YEAR'] == year]
             x_test_df = x_test_df.append(x_test_new)
@@ -203,7 +203,6 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
         y_train_df = sk.shuffle(y_train_df, random_state=random_state)
         x_test_df = sk.shuffle(x_test_df, random_state=random_state)
         y_test_df = sk.shuffle(y_test_df, random_state=random_state)
-
     if outdir:
         x_train_df.to_csv(outdir + 'X_Train.csv', index=False)
         x_test_df.to_csv(outdir + 'X_Test.csv', index=False)

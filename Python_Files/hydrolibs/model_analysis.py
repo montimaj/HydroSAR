@@ -224,7 +224,7 @@ def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, forecast_ye
         fig.suptitle(plot_title)
         df = gw_df[gw_df.GW_NAME == gw]
         df.set_index('YEAR').plot(ax=ax1)
-        ax1.axvspan(2009.8, 2019.2, color='#a6bddb', alpha=0.6)
+        ax1.axvspan(2001.8, 2019.2, color='#a6bddb', alpha=0.6)
         min_forecast_yr = min(forecast_years)
         ax1.set_xlim(left=np.min(df.YEAR) - 0.1, right=np.max(df.YEAR) + 0.1)
         ax1.axvspan(2019.21, 2020.1, color='#fee8c8', alpha=1)
@@ -302,10 +302,9 @@ def calculate_gw_stats(gw_df, gw_name_list, out_dir, train_end=2010, test_start=
         for gw in gw_name_list:
             actual_values = gw_df[gw_df.GW_NAME == gw].Actual_GW
             pred_values = gw_df[gw_df.GW_NAME == gw].Pred_GW
-            rmse = np.round(metrics.mean_squared_error(actual_values, pred_values, squared=False), 2)
-            r2 = np.round(metrics.r2_score(actual_values, pred_values), 2)
-            mae = np.round(metrics.mean_absolute_error(actual_values, pred_values), 2)
-            gw_metrics_dict = {'GW_TYPE': [gw_df_label], 'GW_NAME': [gw], 'RMSE': [rmse], 'R2': [r2], 'MAE': [mae]}
+            r2, mae, rmse, nmae, nrmse = get_error_stats(actual_values, pred_values)
+            gw_metrics_dict = {'GW_TYPE': [gw_df_label], 'GW_NAME': [gw], 'R2': [r2], 'RMSE': [rmse], 'MAE': [mae],
+                               'NRMSE': [nrmse], 'NMAE': [nmae]}
             gw_metrics_df = gw_metrics_df.append(pd.DataFrame(data=gw_metrics_dict))
     out_csv = out_dir + 'GW_Metrics.csv'
     gw_metrics_df.to_csv(out_csv, index=False)

@@ -682,7 +682,7 @@ class HydroML:
             return df
 
     def build_model(self, df, n_estimators=100, random_state=0, bootstrap=True, max_features=3, test_size=None,
-                    pred_attr='GW', shuffle=False, plot_graphs=False, plot_3d=False, drop_attrs=(), test_year=(2012,),
+                    pred_attr='GW', shuffle=True, plot_graphs=False, plot_3d=False, drop_attrs=(), test_year=(2012,),
                     test_gw=('DIN',), use_gw=False, split_attribute=True, load_model=False, calc_perm_imp=False,
                     spatio_temporal=False):
         """
@@ -850,12 +850,12 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (130.5, 195.5): 0
                      }
     drop_attrs = ('YEAR',)
-    test_years = range(2012, 2020)
+    test_years = range(2010, 2020)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET',)
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('SCA',)
+    test_ama_ina = ('HAR',)
     xres, yres = 2000, 2000
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
@@ -881,7 +881,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reproject_rasters(already_reprojected=load_files)
         # load_files = False
         load_gw_info = True
-        for sf in range(5, 6):
+        for sf in range(4, 5):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf), post_process=False)
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
@@ -891,11 +891,10 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                      load_df=load_df, load_gw_info=load_gw_info)
             load_gw_info = True
             dattr = list(drop_attrs) + ['GW_NAME']
-            max_features = 7
             rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=max_features,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=7,
                                       plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
-                                      spatio_temporal=True)
+                                      spatio_temporal=False, shuffle=False, random_state=0)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(2020,),
@@ -905,15 +904,15 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                 gw.create_subsidence_pred_gw_rasters(already_created=False)
             input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
             ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
-                            out_dir=output_dir, forecast_years=(2020,), show_plots=False)
+                            out_dir=output_dir, forecast_years=(2020,), show_plots=True)
             actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
                                                                   already_cropped=load_rf_model,
                                                                   test_years=test_years)
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
-                        forecast_years=(2020,))
-        ma.subsidence_analysis(subsidence_gw_dir)
+    ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
+                    forecast_years=(2020,))
+    ma.subsidence_analysis(subsidence_gw_dir)
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
-           ama_ina_train=True)
+    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=True, load_df=True,
+           ama_ina_train=False)

@@ -12,8 +12,8 @@ actual.raster.list <- list()
 years <- seq(2010, 2019)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Apr_Sept/Predicted_Rasters/pred_", i, ".tif", sep=""))
-  actual.raster <- raster(paste("../../Inputs/Files_AZ_Apr_Sept/RF_Data/GW_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../Outputs/Output_AZ_Apr_Sept_2K_T_Full/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  actual.raster <- raster(paste("../../Inputs/Files_AZ_Apr_Sept_2K/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   actual.raster = projectRaster(actual.raster, crs = wgs84, method = "ngb")
@@ -83,29 +83,31 @@ breaks_mean <- seq(min_value_mean, max_value_mean, by=230)
 col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 
 
-min_value_mean  <- 0
-max_value_mean <- 400
-breaks_mean <- seq(min_value_mean, max_value_mean, by=50)
-col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
+# min_value_mean  <- 0
+# max_value_mean <- 400
+# breaks_mean <- seq(min_value_mean, max_value_mean, by=50)
+# col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/Pred_Temporal.png", width=6, height=6, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/Pred_Temporal.png", width=6, height=6, units='in', res=600)
 plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
 plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
 plot(ama_map, col=NA, border='coral', add=T)
+
 plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
 axis(side=2, at=c(37:40))
 axis(side=2, at=c(31:37))
 axis(side=1, at=c(-103:-94))
 axis(side=1, at=c(-115:-109))
 dev.off()
+
 min_value_mean_error  <- round(minValue(err.mean.raster))
 max_value_mean_error  <- round(maxValue(err.mean.raster))
 min_value_mean_error <- floor(min_value_mean_error / 100) * 100
 max_value_mean_error <- ceiling(max_value_mean_error / 100) * 100
-breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=300)
+breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=260)
 col_error_mean <- brewer.pal(n=length(breaks_error_mean) - 1, name='Spectral')
 
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/Error_Temporal.png", width=6, height=6, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/Error_Temporal.png", width=6, height=6, units='in', res=600)
 plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
 plot(err.mean.raster, col = rev(col_error_mean), breaks=breaks_error_mean, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
      legend.args=list(text='Mean Error (mm/yr)', side = 2, font = 0.5, cex = 1), ext=plot_ext, box=F, axes=F, add=T)
@@ -115,7 +117,7 @@ axis(side=1, at=c(-115:-109))
 dev.off()
 
 
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/AP_Temporal.png", width=6, height=4.5, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/Temporal/AP_Temporal.png", width=6, height=4.5, units='in', res=600)
 plot(pred.mean.raster, actual.mean.raster, xlab='Predicted GW Pumping (mm/yr)',
      ylab='Actual GW Pumping (mm/yr)')
 legend(1500, 500, bty = 'n', legend = c("1:1 relationship"),
@@ -135,7 +137,7 @@ std.err.df$STD.ERR[std.err.df$STD.ERR < -10] <- NA
 std.err.df$STD.ERR[std.err.df$STD.ERR > 10] <- NA
 
 std.err.df <- na.omit(std.err.df)
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/SR_Temporal.png", width=6, height=4.5, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/SR_Temporal.png", width=6, height=4.5, units='in', res=600)
 hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals')
 x <- seq(min(std.err.df$STD.ERR), max(std.err.df$STD.ERR), length.out=length(std.err.df$STD.ERR))
 dist <- dnorm(x, mean(std.err.df$STD.ERR), sd(std.err.df$STD.ERR))
@@ -152,12 +154,12 @@ pred.raster.df$pred[is.na(err.df$error) == T] <- NA
 pred.raster.df <- na.omit(pred.raster.df)
 
 
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/SRP_Temporal.png", width=6, height=4.5, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/Temporal/SRP_Temporal.png", width=6, height=4.5, units='in', res=600)
 plot(pred.raster.df$pred, std.err.df$STD.ERR, xlab = 'Predicted GW Pumping (mm/yr)', ylab = 'Standardized Residuals')
 abline(h = 0, col = "red")
 dev.off()
 
-png("C:/Users/sayan/OneDrive/Documents/HydroMST/Paper2/Figures/QQ_Temporal.png", width=6, height=4.5, units='in', res=600)
+png("D:/HydroMST/Paper2/Figures/Temporal/QQ_Temporal.png", width=6, height=4.5, units='in', res=600)
 qqnorm(std.err.df$STD.ERR, main = "")
 qqline(std.err.df$STD.ERR, col = "red")
 dev.off()
