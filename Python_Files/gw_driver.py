@@ -15,8 +15,8 @@ class HydroML:
 
     def __init__(self, input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                  input_state_file, gdal_path, input_ts_dir=None, input_subsidence_dir=None, input_cdl_file=None,
-                 input_gw_boundary_file=None, input_ama_ina_file=None, input_watershed_file=None, ssebop_link=None,
-                 sed_thick_csv=None):
+                 input_gw_boundary_file=None, input_ama_ina_file=None, input_watershed_file=None, input_gw_basin=None,
+                 ssebop_link=None, sed_thick_csv=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -30,9 +30,11 @@ class HydroML:
         Linux or Mac and 'C:/OSGeo4W64/' on Windows
         :param input_ts_dir: Input directory containing the time series data, set None to automatically download data
         :param input_gw_boundary_file: Input GMD shapefile for Kansas or Well Registry shapefile for Arizona
-        :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona. Set None for Kansas.
-        :param input_watershed_file: The file path to the Arizona surface watershed shapefile. Set None for Kansas.
+        :param input_ama_ina_file: The file path to the AMA/INA shapefile required for Arizona.
+        :param input_watershed_file: The file path to the Arizona surface watershed shapefile.
+        :param input_gw_basin: Groundwater basin shapefile path for Arizona
         :param ssebop_link: SSEBop data download link. SSEBop data are not downloaded if its set to None.
+        :param sed_thick_csv: USGS Sediment Thickness CSV file path
         """
 
         self.input_dir = make_proper_dir_name(input_dir)
@@ -46,6 +48,7 @@ class HydroML:
         self.input_gw_boundary_file = input_gw_boundary_file
         self.input_ama_ina_file = input_ama_ina_file
         self.input_watershed_file = input_watershed_file
+        self.input_gw_basin = input_gw_basin
         self.input_state_file = input_state_file
         self.input_cdl_file = input_cdl_file
         self.ssebop_link = ssebop_link
@@ -53,6 +56,7 @@ class HydroML:
         self.input_ama_ina_reproj_file = None
         self.input_state_reproj_file = None
         self.input_watershed_reproj_file = None
+        self.input_gw_basin_reproj_file = None
         self.final_gw_dir = None
         self.actual_gw_dir = None
         self.ref_raster = None
@@ -92,8 +96,8 @@ class HydroML:
         self.sed_thick_shp_file = None
         self.sed_thick_raster_file = None
         self.sed_thick_reproj_dir = None
-        self.watershed_raster_dir = None
-        self.watershed_raster_reproj_dir = None
+        self.gw_basin_raster_dir = None
+        self.gw_basin_raster_reproj_dir = None
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
     def download_data(self, year_list, start_month, end_month, cdl_year=2015, already_downloaded=False,
@@ -228,11 +232,14 @@ class HydroML:
         gw_ama_ina_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_ama_ina/reproj')
         watershed_reproj_dir = make_proper_dir_name(self.file_dir + 'watershed/reproj')
         state_reproj_dir = make_proper_dir_name(self.file_dir + 'state/reproj')
+        gw_basin_reproj_dir = make_proper_dir_name(self.file_dir + 'GW_Basin/reproj')
         self.input_gw_boundary_reproj_file = gw_boundary_reproj_dir + 'input_boundary_reproj.shp'
         if self.input_ama_ina_file:
             self.input_ama_ina_reproj_file = gw_ama_ina_reproj_dir + 'input_ama_ina_reproj.shp'
         if self.input_watershed_file:
             self.input_watershed_reproj_file = watershed_reproj_dir + 'input_watershed_reproj.shp'
+        if self.input_gw_basin:
+            self.input_gw_basin_reproj_file = gw_basin_reproj_dir + 'input_gw_basin_reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
             print('Reprojecting Boundary/State/AMA_INA/Watershed shapefiles...')
@@ -247,6 +254,10 @@ class HydroML:
             if self.input_watershed_file:
                 makedirs([watershed_reproj_dir])
                 vops.reproject_vector(self.input_watershed_file, outfile_path=self.input_watershed_reproj_file,
+                                      ref_file=ref_shp, raster=False)
+            if self.input_gw_basin:
+                makedirs([gw_basin_reproj_dir])
+                vops.reproject_vector(self.input_gw_basin, outfile_path=self.input_gw_basin_reproj_file,
                                       ref_file=ref_shp, raster=False)
             vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
                                   raster=False)
@@ -324,24 +335,24 @@ class HydroML:
                             burn_value=1.0, gdal_path=self.gdal_path, gridding=False)
         print('Well registry raster created...')
 
-    def create_watershed_raster(self, xres=5000., yres=5000., already_created=False):
+    def create_gw_basin_raster(self, xres=5000., yres=5000., already_created=False):
         """
-        Create watershed raster for Arizona
+        Create GW basin raster for Arizona
         :param xres: X-Resolution (map unit)
         :param yres: Y-Resolution (map unit)
         :param already_created: Set True if raster already exists
         :return: None
         """
 
-        self.watershed_raster_dir = make_proper_dir_name(self.file_dir + 'Watershed_Raster')
+        self.gw_basin_raster_dir = make_proper_dir_name(self.file_dir + 'GW_Basin_Raster')
         if not already_created:
-            print('Creating watershed raster...')
-            makedirs([self.watershed_raster_dir])
-            watershed_raster_file = self.watershed_raster_dir + 'Watershed.tif'
-            vops.shp2raster(self.input_watershed_reproj_file, watershed_raster_file, xres=xres, yres=yres,
+            print('Creating GW Basin raster...')
+            makedirs([self.gw_basin_raster_dir])
+            gw_basin_raster_file = self.gw_basin_raster_dir + 'GW_Basin.tif'
+            vops.shp2raster(self.input_gw_basin_reproj_file, gw_basin_raster_file, xres=xres, yres=yres,
                             smoothing=0, value_field='OBJECTID', add_value=False, gdal_path=self.gdal_path,
                             gridding=False)
-        print('Well registry raster created...')
+        print('GW Basin raster created...')
 
     def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
                           convert_units=True, already_created=True):
@@ -484,11 +495,11 @@ class HydroML:
         self.crop_coeff_reproj_dir = self.crop_coeff_dir + 'Crop_Coeff_Reproj/'
         self.well_reg_reproj_dir = self.well_reg_dir + 'Well_Reg_Reproj/'
         self.sed_thick_reproj_dir = self.sed_thick_dir + 'Reproj/'
-        self.watershed_raster_reproj_dir = self.watershed_raster_dir + 'Reproj/'
+        self.gw_basin_raster_reproj_dir = self.gw_basin_raster_dir + 'Reproj/'
         if not already_reprojected:
             print('Reprojecting rasters...')
             makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir,
-                      self.sed_thick_reproj_dir, self.watershed_raster_reproj_dir])
+                      self.sed_thick_reproj_dir, self.gw_basin_raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster,
@@ -497,8 +508,8 @@ class HydroML:
                                    outdir=self.well_reg_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.sed_thick_dir, ref_raster=self.ref_raster, outdir=self.sed_thick_reproj_dir,
                                    pattern='Sed_Thick.tif', gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.watershed_raster_dir, ref_raster=self.ref_raster,
-                                   outdir=self.watershed_raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.gw_basin_raster_dir, ref_raster=self.ref_raster,
+                                   outdir=self.gw_basin_raster_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
@@ -775,7 +786,7 @@ class HydroML:
         if not already_created:
             makedirs([self.subsidence_pred_gw_dir])
             sed_thick_raster = glob(self.sed_thick_reproj_dir + '*.tif')[0]
-            watershed_raster = glob(self.watershed_raster_reproj_dir + '*.tif')[0]
+            watershed_raster = glob(self.gw_basin_raster_reproj_dir + '*.tif')[0]
             rops.create_subsidence_pred_gw_rasters(self.pred_out_dir, self.converted_subsidence_dir, sed_thick_raster,
                                                    watershed_raster, self.subsidence_pred_gw_dir,
                                                    scale_to_cm=scale_to_cm, verbose=verbose)
@@ -825,6 +836,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
     input_ama_ina_file = input_dir + 'Boundary/AMA_and_INA.shp'
     input_watershed_file = input_dir + 'Watersheds/Surface_Watershed.shp'
+    input_gw_basin = input_dir + 'GW_Basin/Groundwater_Basin.shp'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
     gdal_path = 'C:/OSGeo4W64/'
@@ -861,14 +873,15 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
                      input_gw_boundary_file=input_well_reg_file, input_ama_ina_file=input_ama_ina_file,
-                     input_watershed_file=input_watershed_file, ssebop_link=ssebop_link, sed_thick_csv=sed_thick_csv)
+                     input_watershed_file=input_watershed_file, input_gw_basin=input_gw_basin, ssebop_link=ssebop_link,
+                     sed_thick_csv=sed_thick_csv)
         gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
                          already_downloaded=load_files, already_extracted=load_files)
         gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
                             already_downloaded=load_files, already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
-        gw.reproject_shapefiles(already_reprojected=load_files)
+        gw.reproject_shapefiles(already_reprojected=False)
         # load_files = False
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
@@ -877,19 +890,20 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
-        gw.create_watershed_raster(xres=xres, yres=yres, already_created=load_files)
+        load_files = False
+        gw.create_gw_basin_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
-        # load_files = False
         load_gw_info = True
-        for sf in range(4, 5):
+        for idx, sf in enumerate(range(4, 5)):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf), post_process=False)
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False)
             if subsidence_analysis:
                 gw.organize_subsidence_rasters(already_organized=load_files)
             gw.mask_rasters(already_masked=load_files)
+            if idx > 0:
+                load_gw_info = True
             df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(2020,),
                                      load_df=load_df, load_gw_info=load_gw_info)
-            load_gw_info = True
             dattr = list(drop_attrs) + ['GW_NAME']
             rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
                                       pred_attr=pred_attr, load_model=load_rf_model, max_features=7,
@@ -914,5 +928,5 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=True, load_df=True,
+    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=True, load_df=False,
            ama_ina_train=False)

@@ -12,7 +12,7 @@ actual.raster.list <- list()
 years <- seq(2010, 2019)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Apr_Sept_2K_T_Full/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../Outputs/Output_AZ_Apr_Sept_2K_ST/Predicted_Rasters/pred_", i, ".tif", sep=""))
   actual.raster <- raster(paste("../../Inputs/Files_AZ_Apr_Sept_2K/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"

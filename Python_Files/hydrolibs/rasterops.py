@@ -993,7 +993,7 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, s
     :param input_pred_gw_dir: Input predicted GW raster directory
     :param input_subsidence_dir: Input subsidence directory having organized subsidence data
     :param sed_thick_raster: Sediment thickness raster
-    :param watershed_raster: Watershed raster
+    :param watershed_raster: Watershed raster (Either surface watershed or GW basin)
     :param output_dir: Output directory
     :param scale_to_cm: Set False to disable scaling GW and subsidence data to cm, default GW is in mm and
     subsidence is in m
