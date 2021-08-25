@@ -712,7 +712,7 @@ class HydroML:
         :param plot_3d: Plot pairwise 3D partial dependence plots
         :param drop_attrs: Drop these specified attributes
         :param test_year: Build test data from only this year(s).
-        :param test_gw: Build test data from only this GMD (Kansas) or AMA/INA (Arizona) region, use_gmd must be set to
+        :param test_gw: Build test data from only this AMA/INA (Arizona) region, use_gw must be set to
         True.
         :param use_gw: Set True to build test data from only test_gw
         :param split_attribute: Split train test data based on years
@@ -881,7 +881,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                             already_downloaded=load_files, already_extracted=load_files)
         gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
                              already_preprocessed=load_files)
-        gw.reproject_shapefiles(already_reprojected=False)
+        gw.reproject_shapefiles(already_reprojected=load_files)
         # load_files = False
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
@@ -890,9 +890,9 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
-        load_files = False
         gw.create_gw_basin_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
+        # load_files = False
         load_gw_info = True
         for idx, sf in enumerate(range(4, 5)):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf), post_process=False)
@@ -922,11 +922,11 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
             actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
                                                                   already_cropped=load_rf_model,
                                                                   test_years=test_years)
-    ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
-                    forecast_years=(2020,))
-    ma.subsidence_analysis(subsidence_gw_dir)
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
+                        forecast_years=(2020,))
+        ma.subsidence_analysis(subsidence_gw_dir)
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=True, load_df=False,
-           ama_ina_train=False)
+    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=True, load_df=True,
+           ama_ina_train=True)
