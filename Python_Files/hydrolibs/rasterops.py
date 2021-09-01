@@ -987,7 +987,7 @@ def parallel_organize_subsidence_data(input_subsidence_dir, output_dir, ref_rast
 
 
 def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, sed_thick_raster, watershed_raster,
-                                      output_dir, scale_to_cm=True, verbose=False):
+                                      output_dir, scale_to_cm=False, verbose=False, tpgw_threshold=100):
     """
     Create total and mean predicted GW withdrawal and subsidence rasters based on subsidence years and watershed
     :param input_pred_gw_dir: Input predicted GW raster directory
@@ -996,15 +996,16 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, s
     :param watershed_raster: Watershed raster (Either surface watershed or GW basin)
     :param output_dir: Output directory
     :param scale_to_cm: Set False to disable scaling GW and subsidence data to cm, default GW is in mm and
-    subsidence is in m
+    subsidence is in m. If False, subsidence will be converted to mm
     :param verbose: Set True to get additional info
+    :param tpgw_threshold: TPGW lower limit in mm for subsidence analysis
     :return: None
     """
 
     subsidence_dirs = glob(input_subsidence_dir + '*')
-    sf_gw, sf_subsidence, max_subsidence = 10, 100, 100
-    if not scale_to_cm:
-        sf_gw, sf_subsidence, max_subsidence = 1, 1, 1
+    sf_gw, sf_subsidence = 1, 1000
+    if scale_to_cm:
+        sf_gw, sf_subsidence, tpgw_threshold = 10, 100, 10
     watershed_arr = read_raster_as_arr(watershed_raster, get_file=False)
     for subsidence_dir in subsidence_dirs:
         sep_pos = subsidence_dir.rfind('_')
@@ -1070,27 +1071,51 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, s
         tpgw_sub_ratio_watershed = np.full_like(tpgw_raster, fill_value=np.nan, dtype=tpgw_raster.dtype)
         sed_thick_arr, sed_thick_file = read_raster_as_arr(sed_thick_raster)
         sed_thick_watershed = watershed_arr.copy()
+        ts_raster_watershed = watershed_arr.copy()
+        tpgw_raster_watershed = watershed_arr.copy()
         for watershed_val in set(watershed_arr[~np.isnan(watershed_arr)]):
             pos = np.where(watershed_arr == watershed_val)
+            ts_pos = np.abs(ts_raster[pos])
             tpgw_pos = tpgw_raster[pos]
-            tpgw_sub_ratio_watershed[pos] = np.nanmean(ts_raster[pos]) / np.nanmean(tpgw_pos)
             sed_thick_pos = sed_thick_arr[pos]
-            sed_thick_flt = sed_thick_pos[np.round(tpgw_pos) >= 10]
-            sed_thick_watershed[pos] = np.nanmean(sed_thick_flt)
-        tpgw_sub_ratio_watershed[np.isinf(tpgw_sub_ratio_watershed)] = np.nan
-        tpgw_sub_ratio_watershed[np.isnan(tpgw_sub_ratio_watershed)] = NO_DATA_VALUE
-        out_raster = subsidence_gw_dir + 'TPGW_TS_Ratio_Watershed_' + start_year + '_' + end_year + '.tif'
-        write_raster(tpgw_sub_ratio_watershed, ref_pred_file, transform=ref_pred_file.transform,
-                     outfile_path=out_raster)
-        sed_thick_watershed[np.isnan(sed_thick_watershed)] = NO_DATA_VALUE
-        sed_thick_watershed_file = output_dir + 'Sed_Thick_Watershed.tif'
-        write_raster(sed_thick_watershed, sed_thick_file, transform=sed_thick_file.transform,
-                     outfile_path=sed_thick_watershed_file)
+            ts_pos_mean = np.nanmean(ts_pos)
+            tpgw_pos_mean = np.nanmean(tpgw_pos)
+            tpgw_sub_ratio_watershed[pos] = ts_pos_mean / tpgw_pos_mean
+            tpgw_raster_watershed[pos] = tpgw_pos_mean
+            tpgw_flt_pos = np.where(np.round(tpgw_pos) >= tpgw_threshold)
+            ts_flt = ts_pos[tpgw_flt_pos]
+            sed_thick_flt = sed_thick_pos[tpgw_flt_pos]
+            flt_arr_list = [ts_flt, sed_thick_flt]
+            var_watershed_arr_list = [ts_raster_watershed, sed_thick_watershed]
+            for flt_arr, var_watershed_arr in zip(flt_arr_list, var_watershed_arr_list):
+                if flt_arr.size:
+                    var_watershed_arr[pos] = np.nanmean(flt_arr)
+                else:
+                    var_watershed_arr[pos] = -1
+        out_arr_list = [
+            tpgw_sub_ratio_watershed,
+            tpgw_raster_watershed,
+            ts_raster_watershed,
+            sed_thick_watershed
+        ]
+        out_file_prefix_list = [
+            'TPGW_TS_Ratio_Watershed',
+            'TPGW_Watershed',
+            'TS_Watershed',
+            'Sed_Thick_Watershed'
+        ]
+        for out_arr, out_file_prefix in zip(out_arr_list, out_file_prefix_list):
+            out_arr[np.isinf(out_arr)] = np.nan
+            out_arr[np.isnan(out_arr)] = NO_DATA_VALUE
+            out_raster = subsidence_gw_dir + out_file_prefix + '_' + start_year + '_' + end_year + '.tif'
+            write_raster(out_arr, ref_pred_file, transform=ref_pred_file.transform, outfile_path=out_raster)
         if verbose:
+            sed_thick_watershed[sed_thick_watershed == -1] = NO_DATA_VALUE
             ts_tpgw_ratio_vals = np.abs(tpgw_sub_ratio_watershed[sed_thick_watershed != NO_DATA_VALUE].ravel())
             sed_vals = sed_thick_watershed[sed_thick_watershed != NO_DATA_VALUE].ravel()
             ts_sed_cor = np.corrcoef(ts_tpgw_ratio_vals, sed_vals)[0, 1]
             print('TS_SED_Cor({}-{})= {}'.format(start_year, end_year, ts_sed_cor))
+            print('TS_SED_Min_Max({}-{})= ({}, {})'.format(start_year, end_year, np.min(sed_vals), np.max(sed_vals)))
 
 
 def create_crop_coeff_raster(input_cdl_file, output_file):

@@ -772,11 +772,11 @@ class HydroML:
             self.pred_out_dir = output_dir
         return actual_raster_dir, self.pred_out_dir
 
-    def create_subsidence_pred_gw_rasters(self, scale_to_cm=True, verbose=False, already_created=False):
+    def create_subsidence_pred_gw_rasters(self, scale_to_cm=False, verbose=False, already_created=False):
         """
         Create total predicted GW withdrawal rasters based on subsidence years
         :param scale_to_cm: Set False to disable scaling GW and subsidence data to cm, default GW is in mm and
-        subsidence is in m
+        subsidence is in m. If False, subsidence will be converted to mm
         :param verbose: Set True to get additional info
         :param already_created: Set True to disable creating these rasters
         :return: None
@@ -891,6 +891,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_gw_basin_raster(xres=xres, yres=yres, already_created=load_files)
+        # load_files = False
         gw.reproject_rasters(already_reprojected=load_files)
         # load_files = False
         load_gw_info = True
@@ -915,7 +916,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                                             only_pred=False, use_full_extent=subsidence_analysis,
                                                             post_process=False)
             if subsidence_analysis:
-                gw.create_subsidence_pred_gw_rasters(already_created=False)
+                gw.create_subsidence_pred_gw_rasters(already_created=False, verbose=False, scale_to_cm=False)
             input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
             ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
                             out_dir=output_dir, forecast_years=(2020,), show_plots=True)
@@ -929,4 +930,4 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 if __name__ == '__main__':
     run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=True, load_df=True,
-           ama_ina_train=True)
+           ama_ina_train=False)
