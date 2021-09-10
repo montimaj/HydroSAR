@@ -21,7 +21,7 @@ from shapely.geometry import Point
 from collections import defaultdict
 from datetime import datetime
 from glob import glob
-from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str, make_proper_dir_name, makedirs
+from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str, make_proper_dir_name, makedirs, copy_file
 from Python_Files.hydrolibs.vectorops import shp2raster
 from Python_Files.hydrolibs.model_analysis import get_error_stats
 
@@ -278,22 +278,25 @@ def fill_nans(input_raster_file, ref_file, outfile_path, fill_value=0):
     write_raster(raster_arr, input_raster_file, transform=input_raster_file.transform, outfile_path=outfile_path)
 
 
-def filter_nans(raster_file, ref_file, outfile_path):
+def filter_nans(input_raster_file, ref_file, outfile_path):
     """
     Set nan considering reference file to a raster file
-    :param raster_file: Input raster file
+    :param input_raster_file: Input raster file
     :param ref_file: Reference file
     :param outfile_path: Output file path
     :return: Modified raster array
     """
 
-    raster_arr, raster_file = read_raster_as_arr(raster_file)
+    raster_arr, raster_file = read_raster_as_arr(input_raster_file)
     ref_arr = read_raster_as_arr(ref_file, get_file=False)
     raster_arr[np.isnan(ref_arr)] = NO_DATA_VALUE
+    if input_raster_file == outfile_path:
+        raster_file.close()
     write_raster(raster_arr, raster_file, transform=raster_file.transform, outfile_path=outfile_path)
 
 
-def apply_gaussian_filter(input_raster_file, ref_file, outfile_path, sigma=3, normalize=False, ignore_nan=True):
+def apply_gaussian_filter(input_raster_file, ref_file, outfile_path, sigma=3, normalize=False, ignore_nan=True,
+                          precision=None):
     """
     Apply a gaussian filter over a raster image
     :param input_raster_file: Input raster file
@@ -302,6 +305,7 @@ def apply_gaussian_filter(input_raster_file, ref_file, outfile_path, sigma=3, no
     :param sigma: Standard Deviation for gaussian kernel (default 3)
     :param normalize: Set true to normalize the filtered raster at the end
     :param ignore_nan: Set true to ignore nan values during convolution
+    :param precision: Output array floating point rounding precision. Set None to allow full F32 precision
     :return: Gaussian filtered raster
     """
 
@@ -318,6 +322,8 @@ def apply_gaussian_filter(input_raster_file, ref_file, outfile_path, sigma=3, no
         raster_arr_flt /= np.ptp(raster_arr_flt)
     ref_arr = read_raster_as_arr(ref_file, get_file=False)
     raster_arr_flt[np.isnan(ref_arr)] = NO_DATA_VALUE
+    if precision:
+        raster_arr_flt = np.round(raster_arr_flt, precision)
     write_raster(raster_arr_flt, input_raster_file, transform=input_raster_file.transform,
                  outfile_path=outfile_path)
 
@@ -813,7 +819,7 @@ def compute_water_stress_index_raster(watershed_shp_file, raster_file_list, outp
                    yres=yres, gdal_path=gdal_path, outfile_path=ws_out_raster_file)
 
 
-def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir, rep_landuse=True,
+def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list, output_dir,
                                        pattern_list=('P*.tif', 'SSEBop*.tif', 'AGRI*.tif', 'URBAN*.tif'),
                                        gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/', normalize=False):
     """
@@ -822,8 +828,6 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     :param input_raster_dir_list: Input list of raster directories containing precipitation, evapotranspiration,
     agriculture, and urban rasters
     :param output_dir: Output directory to store water stress rasters
-    :param rep_landuse: Set True to replicate landuse raster file paths (should be True if same AGRI and URBAN are used
-    for all years)
     :param pattern_list: Raster pattern list ordered by P, ET, AGRI, and URBAN
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
@@ -836,10 +840,6 @@ def compute_water_stress_index_rasters(watershed_shp_file, input_raster_dir_list
     et_file_list = sorted(glob(input_raster_dir_list[1] + pattern_list[1]))
     agri_file_list = sorted(glob(input_raster_dir_list[2] + pattern_list[2]))
     urban_file_list = sorted(glob(input_raster_dir_list[3] + pattern_list[3]))
-    if rep_landuse:
-        len_precip_list = len(precip_file_list)
-        agri_file_list *= len_precip_list
-        urban_file_list *= len_precip_list
     num_cores = multiprocessing.cpu_count() - 1
     raster_file_lists = zip(precip_file_list, et_file_list, agri_file_list, urban_file_list)
     Parallel(n_jobs=num_cores)(delayed(compute_water_stress_index_raster)(watershed_shp_file, raster_file_list,
@@ -1118,16 +1118,15 @@ def create_subsidence_pred_gw_rasters(input_pred_gw_dir, input_subsidence_dir, s
             print('TS_SED_Min_Max({}-{})= ({}, {})'.format(start_year, end_year, np.min(sed_vals), np.max(sed_vals)))
 
 
-def create_crop_coeff_raster(input_cdl_file, output_file):
+def create_crop_coeff_raster(input_cdl_dir, output_dir):
     """
-    Create crop coefficient raster based on NASS CDL file
-    :param input_cdl_file: Input CDL file path
-    :param output_file: Output file path
+    Create crop coefficient rasters based on NASS CDL files
+    :param input_cdl_dir: Input CDL directory
+    :param output_dir: Output CDL directory
     :return: None
     """
 
-    cdl_arr, cdl_file = read_raster_as_arr(input_cdl_file)
-    crop_coeff_arr = np.zeros_like(cdl_arr)
+    input_cdl_files = sorted(glob(input_cdl_dir + '*.tif'))
     crop_coeff_dict = {0: NO_DATA_VALUE, 1: 1.2, 2: 1.2, 3: 1.2, 4: 1.15, 5: 1.15, 6: 1.15, 10: 1.15, 12: 1.15, 13: 1.2,
                        14: 1.15, 21: 1.15, 22: 1.15, 23: 1.15, 24: 1.15, 25: 1.2, 26: 1.15, 27: 1.05, 28: 1.15, 29: 1.0,
                        30: 1.15, 31: 1.15, 32: 1.10, 33: 1.15, 34: 1.15, 36: 1.2, 37: 1.0, 39: 1.15, 41: 1.20, 42: 1.15,
@@ -1138,9 +1137,101 @@ def create_crop_coeff_raster(input_cdl_file, output_file):
                        225: 1.15, 226: 1.15, 227: 1.0, 228: 1.0, 230: 2.15, 231: 1.85, 232: 2.20, 233: 2.15, 234: 2.35,
                        235: 2.35, 236: 2.35, 237: 2.35, 238: 2.35, 239: 2.35, 240: 2.30, 241: 2.35, 242: 1.05,
                        243: 1.05, 244: 1.05, 245: 1.05, 246: 0.90, 247: 1.10, 248: 1.05, 250: 1.05, 254: 2.30}
-    for crop_code in crop_coeff_dict.keys():
-        crop_coeff_arr[cdl_arr == crop_code] = crop_coeff_dict[crop_code]
-    write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
+    for input_cdl_file in input_cdl_files:
+        year = input_cdl_file[input_cdl_file.rfind('_') + 1: input_cdl_file.rfind('.')]
+        print('Creating CC for', year)
+        cdl_arr, cdl_file = read_raster_as_arr(input_cdl_file)
+        crop_coeff_arr = np.zeros_like(cdl_arr)
+        for crop_code in crop_coeff_dict.keys():
+            crop_coeff_arr[cdl_arr == crop_code] = crop_coeff_dict[crop_code]
+        output_file = output_dir + 'CC_{}.tif'.format(year)
+        write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
+
+
+def reclassify_cdl_files(input_cdl_dir, output_dir, reclass_dict, ref_raster, gdal_path):
+    """
+    Create crop coefficient rasters based on NASS CDL files
+    :param input_cdl_dir: Input CDL directory
+    :param output_dir: Output CDL directory
+    :param reclass_dict: Dictionary where key values are tuples representing the interval for reclassification, the
+    dictionary values represent the new class
+    :param ref_raster: Reference GW pumping raster file to filter reclassified CDL
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :return: None
+    """
+
+    input_cdl_files = sorted(glob(input_cdl_dir + '*.tif'))
+    for input_cdl_file in input_cdl_files:
+        year = input_cdl_file[input_cdl_file.rfind('_') + 1: input_cdl_file.rfind('.')]
+        print('Reclassifying CDL {} data...'.format(year))
+        reclass_file = output_dir + 'reclass_{}.tif'.format(year)
+        reclassify_raster(input_cdl_file, reclass_dict, reclass_file)
+        reclass_reproj_file = output_dir + 'Reclass_CDL_Reproj_{}.tif'.format(year)
+        reproject_raster(reclass_file, reclass_reproj_file, from_raster=ref_raster, gdal_path=gdal_path)
+        filter_nans(reclass_reproj_file, ref_file=ref_raster, outfile_path=reclass_reproj_file)
+
+
+def create_land_use_rasters(land_use_dir_list, cdl_reclass_dir, class_values, class_labels, smoothing_factors,
+                            ref_raster, well_reg_flt_file, post_process=False, is_cdl_ts=True,
+                            out_mean_flt_rasters=True):
+    """
+
+    :param land_use_dir_list: Land use directory list
+    :param cdl_reclass_dir: CDL reclassified directory
+    :param class_values: List of land use class values to consider for creating separate rasters
+    :param class_labels: List of class_labels ordered according to land_uses
+    :param smoothing_factors: Smoothing factor (sigma value for Gaussian filter) to use while smoothing
+    :param ref_raster: Reference GW pumping raster file to filter reclassified CDL
+    :param well_reg_flt_file: Well registry filtered file for filtering land-use
+    :param post_process: Set False to disable post processing based on well registry raster
+    :param is_cdl_ts: Set False if only one CDL file is used.
+    :param out_mean_flt_rasters: Set True to output mean AGRI, URBAN, and SW filtered rasters
+    :return: None
+    """
+
+    cdl_reclass_files = sorted(glob(cdl_reclass_dir + 'Reclass_CDL*.tif'))
+    for idx, (class_value, class_label) in enumerate(zip(class_values, class_labels)):
+        raster_dir = land_use_dir_list[idx]
+        intermediate_raster_dir = make_proper_dir_name(raster_dir + 'Intermediate')
+        makedirs([intermediate_raster_dir])
+        raster_flt_list = []
+        year_list = []
+        for cdl_reclass_file in cdl_reclass_files:
+            year = cdl_reclass_file[cdl_reclass_file.rfind('_') + 1: cdl_reclass_file.rfind('.')]
+            year_list.append(int(year))
+            print('Extracting land use raster', year, 'for', class_label, '...')
+            raster_file = intermediate_raster_dir + class_label + '_actual_{}.tif'.format(year)
+            apply_raster_filter2(cdl_reclass_file, outfile_path=raster_file, val=class_value)
+            raster_masked = intermediate_raster_dir + class_label + '_masked_{}.tif'.format(year)
+            filter_nans(raster_file, ref_raster, outfile_path=raster_masked)
+            raster_flt = raster_dir + class_label + '_flt_{}.tif'.format(year)
+            if int(year) >= 2008:
+                raster_flt_list.append(raster_flt)
+            precision = None
+            if (not out_mean_flt_rasters) and is_cdl_ts:
+                precision = 2
+            apply_gaussian_filter(raster_masked, ref_file=ref_raster, outfile_path=raster_flt,
+                                  sigma=smoothing_factors[idx], normalize=True, ignore_nan=False,
+                                  precision=precision)
+            if post_process:
+                postprocess_rasters(raster_dir, raster_dir, well_reg_flt_file, pattern='*flt_{}.tif'.format(year))
+        if out_mean_flt_rasters:
+            sum_raster_flt_arr, raster_file = read_raster_as_arr(raster_flt_list[0])
+            for raster_flt_file in raster_flt_list[1:]:
+                raster_flt_arr, rfile = read_raster_as_arr(raster_flt_file)
+                sum_raster_flt_arr += raster_flt_arr
+                rfile.close()
+            sum_raster_flt_arr[~np.isnan(sum_raster_flt_arr)] /= len(raster_flt_list)
+            sum_raster_flt_arr[np.isnan(sum_raster_flt_arr)] = raster_file.nodata
+            raster_file.close()
+            out_mean_flt_file = raster_dir + class_label + '_Mean_2008.tif'
+            write_raster(sum_raster_flt_arr, raster_file, transform=raster_file.transform,
+                         outfile_path=out_mean_flt_file)
+            for year in year_list:
+                if year != 2008:
+                    out_file = raster_dir + class_label + '_Mean_{}.tif'.format(year)
+                    copy_file(out_mean_flt_file, out_file, ext='')
 
 
 def update_crop_coeff_raster(input_crop_coeff_raster, cdl_reclass_raster):

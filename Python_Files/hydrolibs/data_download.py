@@ -8,6 +8,7 @@ import os
 import xmltodict
 import geopandas as gpd
 from glob import glob
+from Python_Files.hydrolibs.sysops import copy_file
 
 
 def download_gee_data(year_list, start_month, end_month, aoi_shp_file, outdir):
@@ -93,16 +94,18 @@ def download_ssebop_data(sse_link, year_list, start_month, end_month, outdir):
             open(local_file_name, 'wb').write(r.content)
 
 
-def download_cropland_data(aoi_shp_file, outfile, year=2015):
+def download_cropland_data(aoi_shp_file, output_dir, year_list=(), cdl_year=None):
     """
-    Download USDA-NASS cropland data
+    Download USDA-NASS cropland data for the specified year range. For years before 2008, CDL 2008 will be replicated.
     :param aoi_shp_file: Area of interest shapefile
-    :param outfile: Output file name
-    :param year: Year in %Y format
+    :param output_dir: Output directory
+    :param year_list: List of years in %Y format
+    :param cdl_year: Set CDL year for using a single year for the entire model. If set to None, all available CDL
+    data for the years in year_list will be downloaded (Note: for years before 2008, CDL 2008 will be replicated if
+    cdl_year is None).
     :return: None
     """
 
-    print('Downloading CDL data for', str(year), '...')
     nass_proj_wkt = 'PROJCS["NAD_1983_Albers",' \
                     'GEOGCS["NAD83",' \
                     'DATUM["North_American_Datum_1983",' \
@@ -126,12 +129,29 @@ def download_cropland_data(aoi_shp_file, outfile, year=2015):
     aoi_shp = gpd.read_file(aoi_shp_file)
     aoi_shp = aoi_shp.to_crs(nass_proj_wkt)
     minx, miny, maxx, maxy = aoi_shp.geometry.total_bounds
-    nass_xml_url = ' https://nassgeodata.gmu.edu/axis2/services/CDLService/GetCDLFile?year=' + str(year) + '&bbox=' + \
-                   str(minx) + ',' + str(miny) + ',' + str(maxx) + ',' + str(maxy)
-    r = requests.get(nass_xml_url, allow_redirects=True)
-    nass_data_url = xmltodict.parse(r.content)['ns1:GetCDLFileResponse']['returnURL']
-    r = requests.get(nass_data_url, allow_redirects=True)
-    open(outfile, 'wb').write(r.content)
+    outfile = None
+    years = []
+    if cdl_year:
+        years = [y for y in year_list]
+        year_list = [cdl_year]
+    for year in year_list[::-1]:
+        if year >= 2008:
+            print('Downloading CDL data for', str(year), '...')
+            nass_xml_url = ' https://nassgeodata.gmu.edu/axis2/services/CDLService/GetCDLFile?year=' + str(year) + \
+                           '&bbox=' + str(minx) + ',' + str(miny) + ',' + str(maxx) + ',' + str(maxy)
+            r = requests.get(nass_xml_url, allow_redirects=True)
+            nass_data_url = xmltodict.parse(r.content)['ns1:GetCDLFileResponse']['returnURL']
+            r = requests.get(nass_data_url, allow_redirects=True)
+            outfile = output_dir + 'CDL_{}.tif'.format(year)
+            with open(outfile, 'wb') as cdl_out:
+                cdl_out.write(r.content)
+        else:
+            new_file = output_dir + 'CDL_{}.tif'.format(year)
+            copy_file(outfile, new_file, ext='')
+    for year in years:
+        if year != cdl_year:
+            new_file = output_dir + 'CDL_{}.tif'.format(year)
+            copy_file(outfile, new_file, ext='')
 
 
 def extract_data(zip_dir, out_dir, rename_extracted_files=False):

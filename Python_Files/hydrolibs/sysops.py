@@ -65,7 +65,8 @@ def copy_file(input_file, output_file, suffix='', ext='.tif', verbose=True):
     :return: None
     """
 
-    output_file += suffix + ext
+    if suffix or ext:
+        output_file += suffix + ext
     if verbose:
         print('Copying', input_file, 'to', output_file, '...')
     copy2(input_file, output_file)
