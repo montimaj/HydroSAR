@@ -402,6 +402,17 @@ class HydroML:
             makedirs([self.crop_coeff_dir])
             rops.create_crop_coeff_raster(self.cdl_file_dir, output_dir=self.crop_coeff_dir)
 
+    def create_mean_crop_coeff_raster(self, already_created=False):
+        """
+        Create mean crop coefficient raster based on the annual CDL files which are already reprojected
+        :param already_created: Set True to disable raster creation
+        :return: None
+        """
+
+        if not already_created:
+            print('Creating mean crop coefficient raster...')
+            rops.create_mean_crop_coeff_raster(self.crop_coeff_reproj_dir, self.crop_coeff_reproj_dir)
+
     def create_sed_thickness_raster(self, xres=5000., yres=5000., already_converted=False, already_clipped=False,
                                     already_created=False):
         """
@@ -806,7 +817,6 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     gdal_path = 'C:/OSGeo4W64/'
     actual_gw_dir = file_dir + 'RF_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
-    subsidence_gw_dir = output_dir + 'Subsidence_Analysis/'
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
@@ -825,15 +835,15 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR',)
-    test_years = list(range(2002, 2006)) + [2019, 2020]
-    exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET', 'AGRI_flt', 'URBAN_flt', 'SW_flt')
-    if ama_ina_train:
-        exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET', 'AGRI_Mean', 'URBAN_Mean', 'SW_Mean')
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC',)
+    test_years = range(2010, 2021)
+    exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
     filter_attr = None
-    test_ama_ina = ('HAR',)
+    test_ama_ina = ()
+    if ama_ina_train:
+        test_ama_ina = ('HAR',)
     xres, yres = 2000, 2000
     cdl_year = None
     ws_stress_dict = {
@@ -862,6 +872,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_gw_basin_raster(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
+        gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True
         # load_files = False
         for idx, sf in enumerate(range(4, 5)):
@@ -880,7 +891,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                      load_df=load_df, load_gw_info=load_gw_info)
             dattr = list(drop_attrs) + ['GW_NAME']
             rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=7,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=5,
                                       plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
                                       spatio_temporal=False, shuffle=False, random_state=0)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
@@ -892,15 +903,15 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                 gw.create_subsidence_pred_gw_rasters(already_created=False, verbose=False, scale_to_cm=False)
             input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
             ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
-                            out_dir=output_dir, forecast_years=(), show_plots=True)
+                            out_dir=output_dir, test_years=test_years, forecast_years=(), show_plots=True,
+                            ama_ina_list=test_ama_ina)
             actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
                                                                   already_cropped=load_rf_model,
                                                                   test_years=test_years)
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
+        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir, test_years=test_years,
                         forecast_years=())
-        ma.subsidence_analysis(subsidence_gw_dir)
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
+    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=False, load_df=True,
            ama_ina_train=False)

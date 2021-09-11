@@ -1148,6 +1148,35 @@ def create_crop_coeff_raster(input_cdl_dir, output_dir):
         write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
 
 
+def create_mean_crop_coeff_raster(input_cdl_dir, output_dir):
+    """
+    Create crop coefficient raster based on the NASS CDL file
+    :param input_cdl_dir: Input CDL directory containing reprojected CDL files (all have the same dimension)
+    :param output_dir: Output directory
+    :return: None
+    """
+
+    input_cdl_files = sorted(glob(input_cdl_dir + '*.tif'))
+    mean_cc_arr_list = []
+    mean_cc_file = None
+    year_list = []
+    for input_cdl_file in input_cdl_files:
+        year = input_cdl_file[input_cdl_file.rfind('_') + 1: input_cdl_file.rfind('.')]
+        yint = int(year)
+        year_list.append(yint)
+        if yint >= 2008:
+            cc_arr, mean_cc_file = read_raster_as_arr(input_cdl_file)
+            mean_cc_arr_list.append(cc_arr)
+    mean_cc_arr = np.mean(mean_cc_arr_list, axis=0)
+    mean_cc_arr[np.isnan(mean_cc_arr)] = mean_cc_file.nodata
+    mean_cc_out_file = output_dir + 'CC_Mean_2008.tif'
+    write_raster(mean_cc_arr, mean_cc_file, transform=mean_cc_file.transform, outfile_path=mean_cc_out_file)
+    for year in year_list:
+        if year != 2008:
+            out_file = output_dir + 'CC_Mean_{}.tif'.format(year)
+            copy_file(mean_cc_out_file, out_file, ext='')
+
+
 def reclassify_cdl_files(input_cdl_dir, output_dir, reclass_dict, ref_raster, gdal_path):
     """
     Create crop coefficient rasters based on NASS CDL files

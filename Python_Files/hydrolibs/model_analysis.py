@@ -167,10 +167,11 @@ def create_time_series_plot(input_df_list):
     plt.show()
 
 
-def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plot_title=''):
+def create_time_series_forecast_plot(input_df_list, test_years=(), forecast_years=(), plot_title=''):
     """
     Create time series plot (Note: the visualization is hardcoded, needs to be changed in future versions)
     :param input_df_list: Input data frames as constructed from #create_gw_time_series
+    :param test_years: List of test years
     :param forecast_years: The line color changes for these years
     :param plot_title: Plot title
     :return: None
@@ -182,12 +183,13 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     df1.set_index('YEAR').plot(ax=ax1)
     df2.set_index('DT').plot(ax=ax2)
     df2_years = list(df2.DT)
-    ax1.axvspan(2009.8, 2019.2, color='#a6bddb', alpha=0.6)
-    min_forecast_yr = min(forecast_years)
+    ax1.axvspan(test_years[0] - 0.1, test_years[-1] + 0.1, color='#a6bddb', alpha=0.6)
     ax1.set_xlim(left=np.min(df1.YEAR) - 0.1, right=np.max(df1.YEAR) + 0.1)
-    ax1.axvspan(2019.21, 2020.1, color='#fee8c8', alpha=1)
-    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.12, 1),
-               labels=['Actual GW', 'Predicted GW', 'Test Years', 'Forecast'])
+    labels = ['Actual GW', 'Predicted GW', 'Test Years']
+    if forecast_years:
+        ax1.axvspan(test_years[-1] + .21, np.max(forecast_years) + 0.1, color='#fee8c8', alpha=1)
+        labels += ['Forecast']
+    ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.12, 1), labels=labels)
     ax1.set_ylabel('Mean GW Pumping (mm)')
     ax1.set_xticks(df1.YEAR)
     ax1.set_xticklabels(df1.YEAR)
@@ -207,14 +209,17 @@ def create_time_series_forecast_plot(input_df_list, forecast_years=(2019, ), plo
     plt.show()
 
 
-def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, forecast_years=(2019, ), plot_title=''):
+def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, test_years=(), forecast_years=(),
+                                        plot_title='', ama_ina_list=()):
     """
     Create time series plot considering all GMDs (Note: the visualization is hardcoded, needs to be changed in
     future versions)
     :param input_df_list: Input data frames as constructed from #create_gw_time_series
     :param gw_name_list: GMD or AMA/INA labels
+    :param test_years: List of test years
     :param forecast_years: The line color changes for these years
     :param plot_title: Plot title
+    :param ama_ina_list: List of the abbreviated names of the AMA/INA if spatial data splitting strategy was used
     :return: None
     """
 
@@ -224,12 +229,16 @@ def create_gw_time_series_forecast_plot(input_df_list, gw_name_list, forecast_ye
         fig.suptitle(plot_title)
         df = gw_df[gw_df.GW_NAME == gw]
         df.set_index('YEAR').plot(ax=ax1)
-        ax1.axvspan(2001.8, 2019.2, color='#a6bddb', alpha=0.6)
-        min_forecast_yr = min(forecast_years)
+        if not ama_ina_list:
+            ax1.axvspan(test_years[0] - 0.1, test_years[-1] + 0.1, color='#a6bddb', alpha=0.6)
+        if gw in ama_ina_list:
+            ax1.axvspan(2001.8, test_years[-1] + 0.2, color='#a6bddb', alpha=0.6)
+        labels = ['Actual GW: ' + gw, 'Predicted GW: ' + gw, 'Test Years']
+        if forecast_years:
+            ax1.axvspan(test_years[-1] + .21, np.max(forecast_years) + 0.1, color='#fee8c8', alpha=1)
+            labels += ['Forecast']
         ax1.set_xlim(left=np.min(df.YEAR) - 0.1, right=np.max(df.YEAR) + 0.1)
-        ax1.axvspan(2019.21, 2020.1, color='#fee8c8', alpha=1)
-        ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1),
-                   labels=['Actual GW: ' + gw, 'Predicted GW: ' + gw, 'Test Years', 'Forecast'])
+        ax1.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.1, 1), labels=labels)
         ax1.set_ylabel('Mean GW Pumping (mm)')
         ax1.set_xticks(df.YEAR)
         ax1.set_xticklabels(df.YEAR)
@@ -312,8 +321,8 @@ def calculate_gw_stats(gw_df, gw_name_list, out_dir, train_end=2010, test_start=
 
 
 def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=None, use_gws=True,
-                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif', exclude_years=(), forecast_years=(),
-                 show_plots=True):
+                 actual_gw_pattern='GW*.tif', pred_gw_pattern='pred*.tif', exclude_years=(), test_years=(),
+                 forecast_years=(), ama_ina_list=(), show_plots=True):
     """
     Run model analysis to get actual vs predicted graph along with GRACE TWSA variations
     :param actual_gw_dir: Directory containing the actual data
@@ -326,7 +335,9 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
     :param actual_gw_pattern: Actual GW pumping raster file pattern
     :param pred_gw_pattern: Predicted GW pumping raster file pattern
     :param exclude_years: Exclude these years from analysis
+    :param test_years: List of test years (should be consecutive)
     :param forecast_years: Set these years as forecast years
+    :param ama_ina_list: List of the abbreviated names of the AMA/INA if spatial data splitting strategy was use
     :param show_plots: Set True to show plots
     :return: None
     """
@@ -340,7 +351,7 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
                                                forecast_years=forecast_years)
         ts_df = ts_df[0], ts_df[2]
         if show_plots:
-            create_time_series_forecast_plot(ts_df)
+            create_time_series_forecast_plot(ts_df, test_years=test_years, forecast_years=forecast_years)
     else:
         actual_gw_dir_list, pred_gw_dir_list, gw_name_list = preprocess_gws(actual_gw_dir, pred_gw_dir,
                                                                               input_gw_file, out_dir,
@@ -354,7 +365,8 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
         print(calculate_gw_stats(ts_df[1], gw_name_list, out_dir))
         ts_df = ts_df[0], ts_df[2]
         if show_plots:
-            create_gw_time_series_forecast_plot(ts_df, gw_name_list=gw_name_list)
+            create_gw_time_series_forecast_plot(ts_df, gw_name_list=gw_name_list, test_years=test_years,
+                                                forecast_years=forecast_years, ama_ina_list=ama_ina_list)
 
 
 def generate_feature_box_plots(input_csv_file, year_col='YEAR', temporal_features=('ET', 'P'), pred_attr='GW',
@@ -417,16 +429,3 @@ def get_error_stats(actual_values, pred_values, round_places=2, normalize_metric
     rmse = np.round(rmse, round_places)
     mae = np.round(mae, round_places)
     return r2_score, mae, rmse, nmae, nrmse
-
-
-def subsidence_analysis(input_dir):
-    """
-    Analyze subsidence and predicted GW rasters
-    :param input_dir: Input data directory
-    :return: None
-    """
-
-    subsidence_gw_dir = input_dir + 'Subsidence_GW/'
-    subsidence_dirs = glob(subsidence_gw_dir + '*')
-    print(subsidence_dirs)
-    # TODO: Create CSV files for each year
