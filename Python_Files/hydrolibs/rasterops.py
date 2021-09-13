@@ -341,14 +341,15 @@ def get_raster_extents(gdal_raster):
     return str(ulx), str(lry), str(lrx), str(uly)
 
 
-def reproject_raster(input_raster_file, outfile_path, resampling_factor=1, resampling_func=gdal.GRA_NearestNeighbour,
+def reproject_raster(input_raster_file, outfile_path, resampling_factor=1, resampling_func='near',
                      downsampling=True, from_raster=None, keep_original=False, gdal_path='/usr/bin/', verbose=True):
     """
     Reproject raster using GDAL system call
     :param input_raster_file: Input raster file
     :param outfile_path: Output file path
     :param resampling_factor: Resampling factor (default 3)
-    :param resampling_func: Resampling function
+    :param resampling_func: Resampling function ('near', 'bilinear', 'cubic', cubicspline', 'lanczos', 'average',
+    'mode', 'max', 'min', 'med', 'q1', 'q3')
     :param downsampling: Downsample raster (default True)
     :param from_raster: Reproject input raster considering another raster
     :param keep_original: Set True to only use the new projection system from 'from_raster'. The original raster extent
@@ -373,14 +374,8 @@ def reproject_raster(input_raster_file, outfile_path, resampling_factor=1, resam
     if not downsampling:
         resampling_factor = 1 / resampling_factor
     xres, yres = xres * resampling_factor, yres * resampling_factor
-
-    resampling_dict = {gdal.GRA_NearestNeighbour: 'near', gdal.GRA_Bilinear: 'bilinear', gdal.GRA_Cubic: 'cubic',
-                       gdal.GRA_CubicSpline: 'cubicspline', gdal.GRA_Lanczos: 'lanczos', gdal.GRA_Average: 'average',
-                       gdal.GRA_Mode: 'mode', gdal.GRA_Max: 'max', gdal.GRA_Min: 'min', gdal.GRA_Med: 'med',
-                       gdal.GRA_Q1: 'q1', gdal.GRA_Q3: 'q3'}
-    resampling_func = resampling_dict[resampling_func]
     args = ['-t_srs', dst_proj, '-te', extent[0], extent[1], extent[2], extent[3],
-            '-dstnodata', str(no_data), '-r', str(resampling_func), '-tr', str(xres), str(yres), '-ot', 'Float32',
+            '-dstnodata', str(no_data), '-r', resampling_func, '-tr', str(xres), str(yres), '-ot', 'Float32',
             '-overwrite', input_raster_file, outfile_path]
     sys_call = make_gdal_sys_call_str(gdal_path=gdal_path, gdal_command='gdalwarp', args=args, verbose=verbose)
     subprocess.call(sys_call)
@@ -450,7 +445,8 @@ def smooth_rasters(input_raster_dir, ref_file, outdir, pattern='*_Masked.tif', s
                               ignore_nan=ignore_nan)
 
 
-def reproject_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif', gdal_path='/usr/bin/', verbose=True):
+def reproject_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif', gdal_path='/usr/bin/',
+                      resampling_func='near', verbose=True):
     """
     Reproject rasters in a directory
     :param input_raster_dir: Directory containing raster files which are named as *_<Year>.*
@@ -459,6 +455,8 @@ def reproject_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif', gda
     :param pattern: Raster extension
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :param resampling_func: Resampling function ('near', 'bilinear', 'cubic', cubicspline', 'lanczos', 'average',
+    'mode', 'max', 'min', 'med', 'q1', 'q3')
     :param verbose: Set True to print system call info
     :return: None
     """
@@ -466,7 +464,7 @@ def reproject_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif', gda
     for raster_file in glob(input_raster_dir + pattern):
         out_raster = outdir + raster_file[raster_file.rfind(os.sep) + 1:]
         reproject_raster(raster_file, from_raster=ref_raster, outfile_path=out_raster, gdal_path=gdal_path,
-                         verbose=verbose)
+                         verbose=verbose, resampling_func=resampling_func)
 
 
 def mask_rasters(input_raster_dir, ref_raster, outdir, pattern='*.tif'):

@@ -505,8 +505,8 @@ class HydroML:
                       self.sed_thick_reproj_dir, self.gw_basin_raster_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster,
-                                   outdir=self.crop_coeff_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_reproj_dir,
+                                   pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.well_reg_dir, ref_raster=self.ref_raster,
                                    outdir=self.well_reg_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.sed_thick_dir, ref_raster=self.ref_raster, outdir=self.sed_thick_reproj_dir,
@@ -804,8 +804,8 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     gee_data = ['Apr_Sept/', 'Apr_Aug/', 'Annual/']
     input_dir = '../Inputs/Data/Arizona_GW/'
     input_subsidence_dir = input_dir + 'Subsidence/Subsidence_Rasters/'
-    file_dir = '../Inputs/Files_AZ_' + gee_data[0]
-    output_dir = '../Outputs/Output_AZ_' + gee_data[0]
+    file_dir = '../Inputs/Files_AZ_' + gee_data[2]
+    output_dir = '../Outputs/Output_AZ_' + gee_data[2]
     output_shp_dir = file_dir + 'GW_Shapefiles/'
     output_gw_raster_dir = file_dir + 'GW_Rasters/'
     input_well_reg_file = input_dir + 'Well_Registry/WellRegistry.shp'
@@ -844,7 +844,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     test_ama_ina = ()
     if ama_ina_train:
         test_ama_ina = ('HAR',)
-    xres, yres = 2000, 2000
+    xres, yres = 1000, 1000
     cdl_year = None
     ws_stress_dict = {
         'spatial': ('P*.tif', 'SSEBop*.tif', 'AGRI_flt*.tif', 'URBAN_flt*.tif'),
@@ -874,12 +874,13 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True
-        # load_files = False
-        for idx, sf in enumerate(range(4, 5)):
+        load_files = False
+        sf_flt_list = list(range(1, 11))
+        for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
             if ama_ina_train:
-                ws_pattern_list = ws_stress_dict['spatial']
+                ws_pattern_list = ws_stress_dict['temporal']
             gw.create_water_stress_index_rasters(already_created=load_files, normalize=False,
                                                  pattern_list=ws_pattern_list)
             if subsidence_analysis:
@@ -901,17 +902,19 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                                             post_process=False)
             if subsidence_analysis:
                 gw.create_subsidence_pred_gw_rasters(already_created=False, verbose=False, scale_to_cm=False)
-            input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
-            ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
-                            out_dir=output_dir, test_years=test_years, forecast_years=(), show_plots=True,
-                            ama_ina_list=test_ama_ina)
-            actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
-                                                                  already_cropped=load_rf_model,
-                                                                  test_years=test_years)
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir, test_years=test_years,
-                        forecast_years=())
+            if len(sf_flt_list) == 1:
+                input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
+                ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
+                                out_dir=output_dir, test_years=test_years, forecast_years=(), show_plots=True,
+                                ama_ina_list=test_ama_ina)
+                actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
+                                                                      already_cropped=load_rf_model,
+                                                                      test_years=test_years)
+        if len(sf_flt_list) == 1:
+            ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir, test_years=test_years,
+                            forecast_years=())
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=False, load_df=True,
-           ama_ina_train=False)
+    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
+           ama_ina_train=True)
