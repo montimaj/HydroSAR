@@ -844,7 +844,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     test_ama_ina = ()
     if ama_ina_train:
         test_ama_ina = ('HAR',)
-    xres, yres = 1000, 1000
+    xres, yres = 2000, 2000
     cdl_year = None
     ws_stress_dict = {
         'spatial': ('P*.tif', 'SSEBop*.tif', 'AGRI_flt*.tif', 'URBAN_flt*.tif'),
@@ -874,8 +874,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True
-        load_files = False
-        sf_flt_list = list(range(1, 11))
+        sf_flt_list = list(range(4, 5))
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
@@ -911,10 +910,10 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                                                       already_cropped=load_rf_model,
                                                                       test_years=test_years)
         if len(sf_flt_list) == 1:
-            ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir, test_years=test_years,
-                            forecast_years=())
+            ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
+                            test_years=test_years, forecast_years=())
 
 
 if __name__ == '__main__':
     run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
-           ama_ina_train=True)
+           ama_ina_train=False)
