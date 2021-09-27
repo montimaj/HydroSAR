@@ -13,7 +13,7 @@ years <- seq(2010, 2020)
 k <- 1
 for (i in years) {
   pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual_2K_T_Full/Predicted_Rasters/pred_", i, ".tif", sep=""))
-  actual.raster <- raster(paste("../../Inputs/Files_AZ_Annual_2K/RF_Data/GW_", i, ".tif", sep=""))
+  actual.raster <- raster(paste("C:/Downloads/HydroSAR_Backup/Files_AZ_Annual_2K/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   actual.raster = projectRaster(actual.raster, crs = wgs84, method = "ngb")

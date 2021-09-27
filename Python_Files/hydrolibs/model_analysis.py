@@ -369,39 +369,56 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
                                                 forecast_years=forecast_years, ama_ina_list=ama_ina_list)
 
 
-def generate_feature_box_plots(input_csv_file, year_col='YEAR', temporal_features=('ET', 'P'), pred_attr='GW',
-                               drop_attr=('GMD',)):
+def generate_feature_plots(input_csv_file, year_col='YEAR', feature_list=('ET', 'P'), pred_attr='GW',
+                           drop_attr=(), boxplot=False, test_years=(), forecast_years=()):
     """
-    Generate box plots for all features
+    Generate line or box plots for all features
     :param input_csv_file: Input CSV file path
     :param year_col: Name of Year column
-    :param temporal_features: Temporal feature names
+    :param feature_list: Temporal feature names
     :param pred_attr: Prediction attribute name to be dropped from boxplot
     :param drop_attr: Drop these attributes from the plots
+    :param boxplot: Set True to generate boxplots
+    :param test_years: List of test years
+    :param forecast_years: List of forecast years
     :return: None
     """
 
     input_df = pd.read_csv(input_csv_file)
-    input_df = input_df.drop(columns=list(drop_attr))
+    if drop_attr:
+        input_df = input_df.drop(columns=list(drop_attr))
     feature_names = input_df.columns.values.tolist()
     feature_names.remove(pred_attr)
-    for tf in temporal_features:
-        sub_df = input_df[[year_col, tf]]
-        fig, ax = plt.subplots(figsize=(12, 5))
-        seaborn.boxplot(x='YEAR', y=tf, data=sub_df, ax=ax)
+    for f in feature_list:
+        sub_df = input_df[[year_col, f]]
+        if boxplot:
+            fig, ax = plt.subplots(figsize=(12, 5))
+            seaborn.boxplot(x='YEAR', y=f, data=sub_df, ax=ax)
+        else:
+            fig, (ax, _) = plt.subplots(2, 1)
+            feature_mean = []
+            year_list = []
+            for year in sorted(set(sub_df[year_col].values)):
+                year_list.append(year)
+                f_data = np.nanmean(sub_df[sub_df[year_col] == year][f].to_numpy())
+                feature_mean.append(f_data)
+            if f == 'SSEBop':
+                f = 'ET'
+            f_dict = {'YEAR': year_list, f: feature_mean}
+            f_df = pd.DataFrame(data=f_dict)
+            f_df.set_index('YEAR').plot(ax=ax)
+            labels = [f, 'Test Years']
+            if test_years:
+                ax.axvspan(test_years[0] - 0.1, test_years[-1] + 0.1, color='#a6bddb', alpha=0.6)
+                ax.set_xlim(left=np.min(f_df.YEAR) - 0.1, right=np.max(f_df.YEAR) + 0.1)
+                if forecast_years:
+                    ax.axvspan(test_years[-1] + .21, np.max(forecast_years) + 0.1, color='#fee8c8', alpha=1)
+                    labels += ['Forecast']
+                ax.legend(loc=2, ncol=2, frameon=False, fancybox=False, bbox_to_anchor=(0.12, 0.12), labels=labels)
+            ax.set_ylabel(f + ' (mm)')
+            ax.set_xlabel('Year')
+            ax.set_xticks(f_df.YEAR)
         plt.show()
-        feature_names.remove(tf)
-    feature_names.remove(year_col)
-    feature_names.remove('Crop')
-    sub_df = pd.melt(input_df.loc[input_df[year_col] == 2015][feature_names])
-    sub_df = sub_df.rename(columns={'variable': 'Land-Use Features', 'value': 'Land-Use Density'})
-    seaborn.boxplot(x='Land-Use Features', y='Land-Use Density', data=sub_df)
-    plt.show()
-    sub_df = pd.melt(input_df.loc[input_df[year_col] == 2015][['Crop']])
-    sub_df['variable'] = ''
-    sub_df = sub_df.rename(columns={'variable': 'Crop Coefficient', 'value': 'Value'})
-    seaborn.boxplot(x='Crop Coefficient', y='Value', data=sub_df)
-    plt.show()
 
 
 def get_error_stats(actual_values, pred_values, round_places=2, normalize_metric='mean'):
