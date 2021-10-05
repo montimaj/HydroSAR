@@ -1,6 +1,6 @@
 # HydroSAR
 Groundwater pumping prediction using remote sensing datasets and machine learning
 
-![preview](Workflow/Workflow_AZ.tif)
+![preview](Workflow/Workflow_AZ.png)
 
 AGU Fall Meeting 2020 Poster: https://bit.ly/3fz6a6y
