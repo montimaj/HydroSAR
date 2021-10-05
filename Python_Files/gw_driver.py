@@ -916,5 +916,5 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=True, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
+    run_gw(analyze_only=False, load_files=True, load_rf_model=True, subsidence_analysis=True, load_df=True,
            ama_ina_train=False)

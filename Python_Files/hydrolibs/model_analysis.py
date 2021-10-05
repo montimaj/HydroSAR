@@ -8,6 +8,7 @@ import seaborn
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sklearn.metrics as metrics
+import matplotlib.pylab as pylab
 from glob import glob
 from Python_Files.hydrolibs import rasterops as rops
 from Python_Files.hydrolibs import vectorops as vops
@@ -344,6 +345,15 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
 
     out_dir = make_proper_dir_name(out_dir)
     makedirs([out_dir])
+    params = {
+        'legend.fontsize': 'xx-large',
+        'figure.figsize': (15, 6),
+        'axes.labelsize': 20,
+        'axes.titlesize': 'xx-large',
+        'xtick.labelsize': 'xx-large',
+        'ytick.labelsize': 'xx-large'
+    }
+    pylab.rcParams.update(params)
     if not use_gws:
         ts_df = create_gw_forecast_time_series([actual_gw_dir], [pred_gw_dir], grace_csv=grace_csv, out_dir=out_dir,
                                                actual_gw_pattern=actual_gw_pattern, pred_gw_pattern=pred_gw_pattern,
@@ -390,9 +400,9 @@ def generate_feature_plots(input_csv_file, year_col='YEAR', feature_list=('ET', 
     feature_names = input_df.columns.values.tolist()
     feature_names.remove(pred_attr)
     for f in feature_list:
-        sub_df = input_df[[year_col, f]]
+        sub_df = input_df[input_df['GW_NAME'] != 'OTHER'][[year_col, f]]
         if boxplot:
-            fig, ax = plt.subplots(figsize=(12, 5))
+            fig, ax = plt.subplots()
             seaborn.boxplot(x='YEAR', y=f, data=sub_df, ax=ax)
         else:
             fig, (ax, _) = plt.subplots(2, 1)

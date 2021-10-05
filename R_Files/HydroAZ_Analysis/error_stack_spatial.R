@@ -43,15 +43,15 @@ col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 plot_ext <- extent(-113.7, -112.9, 33, 34)
 
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/Actual_HAR_S.tif", width=6, height=6, units='in', res=600)
-plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, ext=plot_ext, box=F, axes=F)
-axis(side=2, at=c(33.2, 33.6, 33.9))
-axis(side=1, at=c(-113.7, -113.4, -113))
+plot(actual.mean.raster, xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5), legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, ext=plot_ext, box=F, axes=F, legend.shrink=0.8)
+axis(side=2, at=c(33.2, 33.6, 33.9), cex.axis=1.5)
+axis(side=1, at=c(-113.7, -113.4, -113), cex.axis=1.5)
 dev.off()
 
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/Pred_HAR_S.tif", width=6, height=6, units='in', res=600)
-plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext)
-axis(side=2, at=c(33.2, 33.6, 33.9))
-axis(side=1, at=c(-113.7, -113.4, -113))
+plot(pred.mean.raster, xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5), legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, legend.shrink=0.8)
+axis(side=2, at=c(33.2, 33.6, 33.9), cex.axis=1.5)
+axis(side=1, at=c(-113.7, -113.4, -113), cex.axis=1.5)
 dev.off()
 
 min_value_mean_error  <- round(minValue(err.mean.raster))
@@ -62,18 +62,17 @@ breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=210)
 col_error_mean <- brewer.pal(n=length(breaks_error_mean), name='Spectral')
 
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/Error_HAR_S.tif", width=6, height=6, units='in', res=600)
-plot(err.mean.raster, col = rev(col_error_mean), breaks=breaks_error_mean, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
-     legend.args=list(text='Mean Error (mm/yr)', side = 2, font = 0.5, cex = 1), ext=plot_ext, box=F, axes=F)
-axis(side=2, at=c(33.2, 33.6, 33.9))
-axis(side=1, at=c(-113.7, -113.4, -113))
+plot(err.mean.raster, col = rev(col_error_mean), breaks=breaks_error_mean, xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5), yaxt='n',
+     legend.args=list(text='Mean Error (mm/yr)', side = 2, font = 0.5, cex = 1.5), ext=plot_ext, box=F, axes=F, legend.shrink=0.8)
+axis(side=2, at=c(33.2, 33.6, 33.9), cex.axis=1.5)
+axis(side=1, at=c(-113.7, -113.4, -113), cex.axis=1.5)
 dev.off()
 
 
-tiff("D:/HydroMST/Paper2/Figures_New/Spatial/AP_HAR_S.tif", width=7, height=4.5, units='in', res=600)
+tiff("D:/HydroMST/Paper2/Figures_New/Spatial/AP_HAR_S.tif", width=7, height=5, units='in', res=600)
 plot(pred.mean.raster, actual.mean.raster, xlab='Predicted GW Pumping (mm/yr)',
-     ylab='Actual GW Pumping (mm/yr)')
-legend(600, 1000, bty = 'n', legend = c("1:1 relationship"),
-       col = c("red"), lty = 1, cex = 0.8)
+     ylab='Actual GW Pumping (mm/yr)', cex=1.5, cex.axis=1.5, cex.lab=1.5)
+legend(100, 1400, bty = 'n', legend = c("1:1 relationship"), col = c("red"), lty = 1, cex = 1.5)
 segments(x0=0,y0=0,x1=maxValue(pred.mean.raster),
          y1=maxValue(actual.mean.raster),col="red")
 dev.off()
@@ -96,7 +95,7 @@ std.err.df$STD.ERR[std.err.df$STD.ERR > 3] <- NA
 std.err.df <- na.omit(std.err.df)
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/SR_HAR_S.tif", width=6, height=4.5, units='in', res=600)
 breaks <- seq(min(std.err.df$STD.ERR),max(std.err.df$STD.ERR),l=35)
-hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals', breaks=breaks)
+hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals', breaks=breaks, cex=1.5, cex.axis=1.5, cex.lab=1.5)
 x <- seq(min(std.err.df$STD.ERR), max(std.err.df$STD.ERR), length.out=length(std.err.df$STD.ERR))
 dist <- dnorm(x, mean(std.err.df$STD.ERR), sd(std.err.df$STD.ERR))
 lines(x, dist, col = 'red')
@@ -113,11 +112,11 @@ pred.raster.df <- na.omit(pred.raster.df)
 
 
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/SRP_HAR_S.tif", width=6, height=4.5, units='in', res=600)
-plot(pred.raster.df$pred, std.err.df$STD.ERR, xlab = 'Predicted GW Pumping (mm/yr)', ylab = 'Standardized Residuals')
+plot(pred.raster.df$pred, std.err.df$STD.ERR, xlab = 'Predicted GW Pumping (mm/yr)', ylab = 'Standardized Residuals', cex=1.5, cex.lab=1.5, cex.axis=1.5)
 abline(h = 0, col = "red")
 dev.off()
 
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/QQ_HAR_S.tif", width=6, height=4.5, units='in', res=600)
-qqnorm(std.err.df$STD.ERR, main = "")
+qqnorm(std.err.df$STD.ERR, main = "", cex=1.5, cex.lab=1.5, cex.axis=1.5)
 qqline(std.err.df$STD.ERR, col = "red")
 dev.off()

@@ -12,8 +12,8 @@ actual.raster.list <- list()
 years <- seq(2010, 2020)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual_2K_T_Full/Predicted_Rasters/pred_", i, ".tif", sep=""))
-  actual.raster <- raster(paste("C:/Downloads/HydroSAR_Backup/Files_AZ_Annual_2K/RF_Data/GW_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  actual.raster <- raster(paste("../../Inputs/Files_AZ_Annual/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   actual.raster = projectRaster(actual.raster, crs = wgs84, method = "ngb")
@@ -84,21 +84,21 @@ col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
 
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/Actual_Temporal.tif", width=6, height=6, units='in', res=600)
-plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
-plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
+plot(az_map, col='grey', border='NA', xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5))
+plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T, legend.shrink=0.8)
 plot(ama_map, col=NA, border='coral', add=T)
-axis(side=2, at=c(31:37))
-axis(side=1, at=c(-115:-109))
+axis(side=2, at=c(31:37), cex.axis=1.5)
+axis(side=1, at=c(-115:-109), cex.axis=1.5)
 dev.off()
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/Pred_Temporal.tif", width=6, height=6, units='in', res=600)
-plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
-plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T)
+plot(az_map, col='grey', border='NA', xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5))
+plot(pred.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='Predicted GW Pumping (mm/yr)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T, legend.shrink=0.8)
 plot(ama_map, col=NA, border='coral', add=T)
+axis(side=2, at=c(31:37), cex.axis=1.5)
+axis(side=1, at=c(-115:-109), cex.axis=1.5)
 # axis(side=2, at=c(37:40))
-axis(side=2, at=c(31:37))
 # axis(side=1, at=c(-103:-94))
-axis(side=1, at=c(-115:-109))
 dev.off()
 
 min_value_mean_error  <- round(minValue(err.mean.raster))
@@ -109,20 +109,20 @@ breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=280)
 col_error_mean <- brewer.pal(n=length(breaks_error_mean), name='Spectral')
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/Error_Temporal.tif", width=6, height=6, units='in', res=600)
-plot(az_map, col='grey', border='NA', xlab='Longitude (Degree)', ylab='Latitude (Degree)')
+plot(az_map, col='grey', border='NA', xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5))
 plot(err.mean.raster, col = rev(col_error_mean), breaks=breaks_error_mean, ylab='Latitude (Degree)', xlab='Longitude (Degree)', yaxt='n',
-     legend.args=list(text='Mean Error (mm/yr)', side = 2, font = 0.5, cex = 1), ext=plot_ext, box=F, axes=F, add=T)
+     legend.args=list(text='Mean Error (mm/yr)', side = 2, font = 0.5, cex = 1.5), ext=plot_ext, box=F, axes=F, add=T, legend.shrink=0.8)
 plot(ama_map, col=NA, border='black', add=T)
-axis(side=2, at=c(31:37))
-axis(side=1, at=c(-115:-109))
+axis(side=2, at=c(31:37), cex.axis=1.5)
+axis(side=1, at=c(-115:-109), cex.axis=1.5)
 dev.off()
 
 
-tiff("D:/HydroMST/Paper2/Figures_New/Temporal/AP_Temporal.tif", width=7, height=4.5, units='in', res=600)
+tiff("D:/HydroMST/Paper2/Figures_New/Temporal/AP_Temporal.tif", width=10, height=7, units='in', res=600)
 plot(pred.mean.raster, actual.mean.raster, xlab='Predicted GW Pumping (mm/yr)',
-     ylab='Actual GW Pumping (mm/yr)')
-legend(1500, 500, bty = 'n', legend = c("1:1 relationship"),
-       col = c("red"), lty = 1, cex = 0.8)
+     ylab='Actual GW Pumping (mm/yr)', cex=2, cex.axis=2, cex.lab=2)
+legend(1200, 500, bty = 'n', legend = c("1:1 relationship"), cex=2,
+       col = c("red"), lty = 1)
 segments(x0=0,y0=0,x1=maxValue(pred.mean.raster),
          y1=maxValue(actual.mean.raster),col="red")
 dev.off()
@@ -144,7 +144,7 @@ std.err.df$STD.ERR[std.err.df$STD.ERR > 3] <- NA
 std.err.df <- na.omit(std.err.df)
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/SR_Temporal.tif", width=6, height=4.5, units='in', res=600)
 breaks <- seq(min(std.err.df$STD.ERR),max(std.err.df$STD.ERR),l=32)
-hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals', breaks=breaks)
+hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals', breaks=breaks, cex=1.5, cex.axis=1.5, cex.lab=1.5)
 x <- seq(min(std.err.df$STD.ERR), max(std.err.df$STD.ERR), length.out=length(std.err.df$STD.ERR))
 dist <- dnorm(x, mean(std.err.df$STD.ERR), sd(std.err.df$STD.ERR))
 lines(x, dist, col = 'red')
@@ -161,11 +161,11 @@ pred.raster.df <- na.omit(pred.raster.df)
 
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/SRP_Temporal.tif", width=6, height=4.5, units='in', res=600)
-plot(pred.raster.df$pred, std.err.df$STD.ERR, xlab = 'Predicted GW Pumping (mm/yr)', ylab = 'Standardized Residuals')
+plot(pred.raster.df$pred, std.err.df$STD.ERR, xlab = 'Predicted GW Pumping (mm/yr)', ylab = 'Standardized Residuals', cex=1.5, cex.lab=1.5, cex.axis=1.5)
 abline(h = 0, col = "red")
 dev.off()
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/QQ_Temporal.tif", width=6, height=4.5, units='in', res=600)
-qqnorm(std.err.df$STD.ERR, main = "")
+qqnorm(std.err.df$STD.ERR, main = "", cex=1.5, cex.lab=1.5, cex.axis=1.5)
 qqline(std.err.df$STD.ERR, col = "red")
 dev.off()
