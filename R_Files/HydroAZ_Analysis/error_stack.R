@@ -12,7 +12,7 @@ actual.raster.list <- list()
 years <- seq(2010, 2020)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual_2K_T/Predicted_Rasters/pred_", i, ".tif", sep=""))
   actual.raster <- raster(paste("../../Inputs/Files_AZ_Annual/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
@@ -31,8 +31,9 @@ err.mean.raster <- mean(err.raster.stack)
 actual.mean.raster <- mean(actual.raster.stack)
 pred.mean.raster <- mean(pred.raster.stack)
 
-writeRaster(actual.mean.raster, 'Actual_KS.tif')
-writeRaster(pred.mean.raster, 'Pred_KS.tif')
+writeRaster(actual.mean.raster, 'Actual_AZ_T.tif')
+writeRaster(pred.mean.raster, 'Pred_AZ_T.tif')
+writeRaster(err.mean.raster, 'Error_AZ_T.tif')
 
 min_value_actual  <- round(min(minValue(actual.raster.stack)))
 min_value_pred  <- round(min(minValue(pred.raster.stack)))
@@ -80,7 +81,7 @@ min_value_mean  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.ra
 max_value_mean <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
 max_value_mean <- ceiling(max_value_mean / 100) * 100
 breaks_mean <- seq(min_value_mean, max_value_mean, by=220)
-col_mean <- rev(brewer.pal(n=length(breaks_mean) - 1, name='RdYlBu'))
+col_mean <- rev(brewer.pal(n=length(breaks_mean), name='RdYlBu'))
 
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/Actual_Temporal.tif", width=6, height=6, units='in', res=600)

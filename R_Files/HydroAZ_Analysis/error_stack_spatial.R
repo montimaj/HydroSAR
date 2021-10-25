@@ -31,8 +31,9 @@ err.mean.raster <- mean(err.raster.stack)
 actual.mean.raster <- mean(actual.raster.stack)
 pred.mean.raster <- mean(pred.raster.stack)
 
-writeRaster(actual.mean.raster, 'Actual_Har.tif')
-writeRaster(pred.mean.raster, 'Pred_Har.tif')
+writeRaster(actual.mean.raster, 'Actual_HAR_S.tif')
+writeRaster(pred.mean.raster, 'Pred_HAR_S.tif')
+writeRaster(err.mean.raster, 'Error_HAR_S.tif')
 
 min_value_mean  <- round(min(minValue(actual.mean.raster), minValue(pred.mean.raster)))
 max_value_mean <- round(max(maxValue(actual.mean.raster), maxValue(pred.mean.raster)))
