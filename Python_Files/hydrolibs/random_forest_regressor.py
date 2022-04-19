@@ -342,11 +342,15 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         #                                cv=2,
         #                                scoring=['neg_root_mean_squared_error'],
         #                                refit='neg_root_mean_squared_error')
-        regressor = RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap, n_estimators=n_estimators,
-                                          max_features=max_features, random_state=random_state, max_depth=18,
-                                          max_samples=None, min_samples_leaf=1e-5, min_samples_split=2,
-                                          max_leaf_nodes=None, min_impurity_decrease=0., min_weight_fraction_leaf=0.,
-                                          ccp_alpha=0.)
+        regressor = RandomForestRegressor(
+            n_jobs=-2, oob_score=True, bootstrap=bootstrap,
+            n_estimators=n_estimators, max_features=max_features,
+            random_state=random_state, max_depth=18,
+            max_samples=None, min_samples_leaf=1e-5,
+            min_samples_split=2, max_leaf_nodes=None,
+            min_impurity_decrease=0., min_weight_fraction_leaf=0.,
+            ccp_alpha=0.
+        )
         regressor.fit(x_train, y_train)
         pickle.dump(regressor, open(out_dir + 'rf_model', mode='wb'))
 

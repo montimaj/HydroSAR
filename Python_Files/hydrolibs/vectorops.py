@@ -253,7 +253,8 @@ def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
 
 
 def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0, xres=1000., yres=1000., gridding=True,
-               smoothing=4800, burn_value=None, add_value=True, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+               smoothing=4800, burn_value=None, add_value=True, init_zero=True,
+               gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert Shapefile to Raster TIFF file
     :param input_shp_file: Input Shapefile path
@@ -267,6 +268,7 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
     :param smoothing: Level of smoothing (higher values imply higher smoothing effect)
     :param burn_value: Set a fixed burn value instead of using value_field.
     :param add_value: Set False to disable adding value to existing raster cell
+    :param init_zero: Set True to initialize raster with zero
     :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
     Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
     :return: None
@@ -285,16 +287,15 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
     gdal_command = 'gdal_rasterize'
     if not gridding:
         args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
-                str(miny), str(maxx), str(maxy), '-init', str(0.0), '-add', '-ot', 'Float32', '-of', 'GTiff',
-                '-a_nodata', str(no_data_value), input_shp_file, outfile_path]
+                str(miny), str(maxx), str(maxy), '-ot', 'Float32', '-of', 'GTiff',
+                '-a_nodata', str(no_data_value)]
         if burn_value is not None:
-            args = ['-l', layer_name, '-burn', str(burn_value), '-tr', str(xres), str(yres), '-te', str(minx),
-                    str(miny), str(maxx), str(maxy), '-init', str(0.0), '-add', '-ot', 'Float32', '-of', 'GTiff',
-                    '-a_nodata', str(no_data_value), input_shp_file, outfile_path]
-        if not add_value:
-            args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
-                    str(miny), str(maxx), str(maxy), '-ot', 'Float32', '-of', 'GTiff', '-a_nodata', str(no_data_value),
-                    input_shp_file, outfile_path]
+            args += ['-burn', str(burn_value)]
+        if add_value:
+            args += ['-add']
+        if init_zero:
+            args += ['-init', str(0.0)]
+        args += [input_shp_file, outfile_path]
     else:
         gdal_command = 'gdal_grid'
         xsize = np.int(np.round((maxx - minx) / xres))
@@ -319,7 +320,9 @@ def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', de
     """
 
     for file in glob(input_dir + pattern):
-        outfile_path = output_dir + file[file.rfind(os.sep) + 1: file.rfind('.') + 1] + 'shp'
+        outfile_path = output_dir + '{}.shp'.format(
+            file[file.rfind(os.sep) + 1: file.rfind('.')]
+        )
         csv2shp(file, outfile_path=outfile_path, delim=delim, target_crs=target_crs, long_lat_pos=long_lat_pos)
 
 

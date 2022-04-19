@@ -31,4 +31,3 @@ def create_merged_results(input_dir, remove_cols=('Test', 'F_IMP')):
 create_merged_results('D:/HydroMST/Paper2/Results_New/Scale/Temporal/')
 create_merged_results('D:/HydroMST/Paper2/Results_New/Scale/Spatial/')
 create_merged_results('D:/HydroMST/Paper2/Results_New/Scale/ST/')
-
