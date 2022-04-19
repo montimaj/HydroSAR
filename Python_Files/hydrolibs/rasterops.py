@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import rasterio as rio
 import geopandas as gpd
 import numpy as np
-import gdal
 import astropy.convolution as apc
 import scipy.ndimage.filters as flt
 import subprocess
@@ -13,6 +12,7 @@ import xmltodict
 import os
 import multiprocessing
 import pandas as pd
+from osgeo import gdal
 from joblib import Parallel, delayed
 from rasterio.plot import plotting_extent
 from rasterio.mask import mask

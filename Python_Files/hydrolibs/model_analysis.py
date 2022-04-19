@@ -109,13 +109,13 @@ def create_gw_forecast_time_series(actual_gw_file_dir_list, pred_gw_file_dir_lis
                                'Pred_GW': pred_raster}
                 if use_gws:
                     raster_dict['GW_NAME'] = [gw_name_list[index]] * actual_raster.shape[0]
-                gw_raster_df = gw_raster_df.append(pd.DataFrame(data=raster_dict))
+                gw_raster_df = pd.concat([gw_raster_df, pd.DataFrame(data=raster_dict)])
             else:
                 mean_actual_gw[year] = np.nan
         gw_dict = {'YEAR': years, 'Actual_GW': list(mean_actual_gw.values()), 'Pred_GW': list(mean_pred_gw.values())}
         if use_gws:
             gw_dict['GW_NAME'] = [gw_name_list[index]] * len(years)
-        gw_df = gw_df.append(pd.DataFrame(data=gw_dict))
+        gw_df = pd.concat([gw_df, pd.DataFrame(data=gw_dict)])
     gw_df.to_csv(out_dir + 'gw_yearly_new.csv', index=False)
     gw_raster_df = gw_raster_df.dropna(axis=0)
     gw_raster_df.to_csv(out_dir + 'GW_Raster.csv', index=False)
@@ -315,7 +315,7 @@ def calculate_gw_stats(gw_df, gw_name_list, out_dir, train_end=2010, test_start=
             r2, mae, rmse, nmae, nrmse = get_error_stats(actual_values, pred_values)
             gw_metrics_dict = {'GW_TYPE': [gw_df_label], 'GW_NAME': [gw], 'R2': [r2], 'RMSE': [rmse], 'MAE': [mae],
                                'NRMSE': [nrmse], 'NMAE': [nmae]}
-            gw_metrics_df = gw_metrics_df.append(pd.DataFrame(data=gw_metrics_dict))
+            gw_metrics_df = pd.concat([gw_metrics_df, pd.DataFrame(data=gw_metrics_dict)])
     out_csv = out_dir + 'GW_Metrics.csv'
     gw_metrics_df.to_csv(out_csv, index=False)
     return gw_metrics_df

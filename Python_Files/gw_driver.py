@@ -885,7 +885,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC',)
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal')
     test_years = range(2010, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
@@ -921,7 +921,6 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
-        load_files = False
         gw.create_gw_basin_canal_rasters(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
@@ -942,9 +941,9 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                      load_df=load_df, load_gw_info=load_gw_info)
             dattr = list(drop_attrs) + ['GW_NAME']
             rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=5,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=7,
                                       plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
-                                      spatio_temporal=False, shuffle=False, random_state=0)
+                                      spatio_temporal=False, shuffle=True, random_state=0)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(),

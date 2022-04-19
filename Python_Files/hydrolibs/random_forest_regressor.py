@@ -69,7 +69,7 @@ def create_dataframe(input_file_dir, input_gw_file, output_dir, label_attr, colu
             df = pd.DataFrame(data=raster_dict)
             flag = True
         else:
-            df = df.append(pd.DataFrame(data=raster_dict))
+            df = pd.concat([df, pd.DataFrame(data=raster_dict)])
     df['GW_NAME'] = gw_arr.tolist() * len(years)
     if remove_na:
         df = df.dropna(axis=0)
@@ -142,7 +142,7 @@ def split_data_train_test_ratio(input_df, pred_attr='GW', shuffle=True, random_s
         y = selected_data[pred_attr]
         x_train, x_test, y_train, y_test = train_test_split(selected_data, y, shuffle=shuffle,
                                                             random_state=random_state, test_size=test_size)
-        x_train_df = x_train_df.append(x_train)
+        x_train_df = pd.concat([x_train_df, x_train])
         if (flag and test_var == svar) or not flag:
             x_test_df = x_test_df.append(x_test)
             y_test_df = pd.concat([y_test_df, y_test])
@@ -188,13 +188,13 @@ def split_data_attribute(input_df, pred_attr='GW', outdir=None, test_years=(2016
         selected_data = input_df.loc[input_df[selection_label] == svar]
         x_t = selected_data
         if svar not in test_vars:
-            x_train_df = x_train_df.append(x_t)
+            x_train_df = pd.concat([x_train_df, x_t])
         else:
-            x_test_df = x_test_df.append(x_t)
+            x_test_df = pd.concat([x_test_df, x_t])
     if spatio_temporal and use_gws:
         for year in test_years:
             x_test_new = x_train_df.loc[x_train_df['YEAR'] == year]
-            x_test_df = x_test_df.append(x_test_new)
+            x_test_df = pd.concat([x_test_df, x_test_new])
             x_train_df = x_train_df.loc[x_train_df['YEAR'] != year]
     y_train_df = x_train_df[pred_attr]
     y_test_df = x_test_df[pred_attr]
@@ -339,15 +339,15 @@ def rf_regressor(input_df, out_dir, n_estimators=500, random_state=0, bootstrap=
         # regressor = GridSearchCV(RandomForestRegressor(n_jobs=-2, oob_score=True, bootstrap=bootstrap),
         #                                param_grid,
         #                                n_jobs=-2,
-        #                                cv=2,
+        #                                cv=3,
         #                                scoring=['neg_root_mean_squared_error'],
         #                                refit='neg_root_mean_squared_error')
         regressor = RandomForestRegressor(
             n_jobs=-2, oob_score=True, bootstrap=bootstrap,
             n_estimators=n_estimators, max_features=max_features,
-            random_state=random_state, max_depth=18,
-            max_samples=None, min_samples_leaf=1e-5,
-            min_samples_split=2, max_leaf_nodes=None,
+            random_state=random_state, max_depth=None,
+            max_samples=None, min_samples_leaf=20,
+            min_samples_split=2, max_leaf_nodes=512,
             min_impurity_decrease=0., min_weight_fraction_leaf=0.,
             ccp_alpha=0.
         )
@@ -483,15 +483,18 @@ def predict_rasters(rf_model, actual_raster_dir, out_dir, pred_years, column_nam
         calculate_errors = True
         if pred_year in exclude_years:
             calculate_errors = False
-        mae, rmse, r_squared, normalized_rmse, normalized_mae = create_pred_raster(rf_model, out_raster=out_pred_raster,
-                                                                                   actual_raster_dir=actual_raster_dir,
-                                                                                   exclude_vars=exclude_vars,
-                                                                                   pred_year=pred_year,
-                                                                                   drop_attrs=drop_attrs,
-                                                                                   pred_attr=pred_attr,
-                                                                                   only_pred=only_pred,
-                                                                                   calculate_errors=calculate_errors,
-                                                                                   column_names=column_names,
-                                                                                   ordering=ordering)
+        mae, rmse, r_squared, normalized_rmse, normalized_mae = create_pred_raster(
+            rf_model,
+            out_raster=out_pred_raster,
+            actual_raster_dir=actual_raster_dir,
+            exclude_vars=exclude_vars,
+            pred_year=pred_year,
+            drop_attrs=drop_attrs,
+            pred_attr=pred_attr,
+            only_pred=only_pred,
+            calculate_errors=calculate_errors,
+            column_names=column_names,
+            ordering=ordering
+        )
         print('YEAR', pred_year, ': MAE =', mae, 'RMSE =', rmse, 'R^2 =', r_squared,
               'Normalized RMSE =', normalized_rmse, 'Normalized MAE =', normalized_mae)
