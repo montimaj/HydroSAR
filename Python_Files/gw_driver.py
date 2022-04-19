@@ -367,12 +367,13 @@ class HydroML:
             )
             canal_co_shp_file = self.gw_basin_canal_reproj_dir + 'Canal_CO_River.shp'
             canal_az_shp_file = self.gw_basin_canal_reproj_dir + 'Canal_AZ.shp'
-            canal_gdf = gpd.read_file(self.input_canal_reproj_file)
+            canal_gdf_co_river = gpd.read_file(self.input_canal_reproj_file)
+            canal_gdf_az = canal_gdf_co_river.copy(deep=True)
             co_attr = 'ColoRiver'
-            co_river_flt = canal_gdf[co_attr] == 1
-            canal_gdf_co_river = canal_gdf[co_river_flt]
-            canal_gdf_az = canal_gdf[~co_river_flt].copy(deep=True)
-            canal_gdf_az[co_attr] = 1
+            co_river_flt = canal_gdf_co_river[co_attr] == 1
+            canal_gdf_co_river.loc[~co_river_flt, co_attr] = 0
+            canal_gdf_az.loc[co_river_flt, co_attr] = 0
+            canal_gdf_az.loc[~co_river_flt, co_attr] = 1
             canal_gdf_co_river.to_file(canal_co_shp_file)
             canal_gdf_az.to_file(canal_az_shp_file)
             canal_shps = [canal_co_shp_file, canal_az_shp_file]
