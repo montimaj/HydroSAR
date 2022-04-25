@@ -621,7 +621,7 @@ class HydroML:
         self.land_use_dir_list = [make_proper_dir_name(self.file_dir + class_label) for class_label in class_labels]
         self.well_reg_flt_dir = make_proper_dir_name(self.well_reg_dir + 'Flt')
         makedirs([self.well_reg_flt_dir])
-        self.well_reg_flt_file = self.well_reg_flt_dir + 'Well_Reg_Flt.tif'
+        self.well_reg_flt_file = self.well_reg_flt_dir + 'well_reg.tif'
         if not already_created:
             well_reg_raster = glob(self.well_reg_reproj_dir + '*.tif')[0]
             rops.filter_nans(well_reg_raster, self.ref_raster, outfile_path=self.well_reg_flt_file)
@@ -924,7 +924,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River')
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ')
     test_years = range(2010, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
@@ -1007,5 +1007,5 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
+    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=True, load_df=False,
            ama_ina_train=False)
