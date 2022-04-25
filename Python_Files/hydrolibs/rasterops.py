@@ -21,6 +21,7 @@ from shapely.geometry import Point
 from collections import defaultdict
 from datetime import datetime
 from glob import glob
+from copy import deepcopy
 from Python_Files.hydrolibs.sysops import make_gdal_sys_call_str, make_proper_dir_name, makedirs, copy_file
 from Python_Files.hydrolibs.vectorops import shp2raster
 from Python_Files.hydrolibs.model_analysis import get_error_stats
@@ -1323,9 +1324,9 @@ def crop_final_gw_rasters(actual_gw_dir, pred_gw_dir, raster_mask, output_dir, g
         r2_score, mae, rmse, nmae, nrmse = get_error_stats(error_df.Actual, error_df.Pred)
         year = actual_raster[actual_raster.rfind('_') + 1: actual_raster.rfind('.')]
         if int(year) in test_years:
-            test_pred_error_df = test_pred_error_df.append(error_df)
+            test_pred_error_df = pd.concat([test_pred_error_df, error_df])
         else:
-            train_pred_error_df = train_pred_error_df.append(error_df)
+            train_pred_error_df = pd.concat([train_pred_error_df, error_df])
         print('YEAR', int(year), ': MAE =', mae, 'RMSE =', rmse, 'R^2 =', r2_score, 'Normalized RMSE =', nrmse,
               'Normalized MAE =', nmae)
     r2_score, mae, rmse, nmae, nrmse = get_error_stats(train_pred_error_df.Actual, train_pred_error_df.Pred)
@@ -1418,3 +1419,45 @@ def create_sed_thickness_raster(input_sed_thick_shp_file, output_sed_thick_raste
     st_arr /= count_arr
     st_arr[np.isnan(st_arr)] = NO_DATA_VALUE
     write_raster(st_arr, st_file, transform=st_file.transform, outfile_path=output_sed_thick_raster)
+
+
+def create_streamflow_rasters(canal_raster, daily_streamflow_file, year_list, start_month, end_month, output_dir):
+    """
+    Create streamflow raster using USGS daily streamflow data and Colorado Canal raster
+    :param canal_raster: Canal raster file (connected to the Colorado River)
+    :param daily_streamflow_file: Daily Streamflow file
+    :param year_list: List of years %yyyy format
+    :param start_month: Data start month, %m format
+    :param end_month: Data end month, %m format
+    :param output_dir: Output directory
+    :return: None
+    """
+
+    dv_df = pd.read_csv(daily_streamflow_file, skiprows=28, header=None, delimiter='\t')
+    dv_df = dv_df.loc[1:, ]
+    flow_attr = 'dv_ft3_sec'
+    dv_df.columns = ['agency_cd', 'site_no', 'datetime', flow_attr, 'status']
+    dv_df.datetime = pd.to_datetime(dv_df.datetime)
+    dt = dv_df.datetime.dt
+    dv_df = dv_df[(dt.month.isin(range(start_month, end_month + 1))) & (dt.year.isin(year_list))]
+    dv_df[flow_attr] = dv_df[flow_attr].astype(float)
+    dv_df_monthly = dv_df.groupby(pd.Grouper(key='datetime', freq='M')).agg({flow_attr: 'mean'}).reset_index()
+    dv_df_annual = dv_df_monthly.groupby(pd.Grouper(key='datetime', freq='Y')).agg({flow_attr: 'sum'}).reset_index()
+    dv_df_annual.datetime = dv_df_annual.datetime.dt.year
+    dv_df_annual[flow_attr] *= 0.0283168
+    flow_attr = 'dv_m3_sec'
+    dv_df_annual.columns = ['Year', flow_attr]
+    dv_df_annual = dv_df_annual.set_index('Year')
+    canal_raster_arr, canal_raster_file = read_raster_as_arr(canal_raster)
+    for year in year_list:
+        canal_arr = deepcopy(canal_raster_arr)
+        canal_arr[canal_arr == 1] *= dv_df_annual.loc[year, flow_attr]
+        canal_arr[np.isnan(canal_arr)] = canal_raster_file.nodata
+        output_streamflow_raster = output_dir + 'Streamflow_{}.tif'.format(year)
+        write_raster(
+            canal_arr,
+            canal_raster_file,
+            transform=canal_raster_file.transform,
+            outfile_path=output_streamflow_raster,
+            no_data_value=canal_raster_file.nodata
+        )

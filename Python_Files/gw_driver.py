@@ -105,7 +105,11 @@ class HydroML:
         self.gw_basin_canal_raster_dir = None
         self.gw_basin_canal_raster_reproj_dir = None
         self.gw_basin_canal_reproj_dir = None
+        self.canal_rasters = None
         self.canal_mask_dir = None
+        self.streamflow_dir = None
+        self.streamflow_reproj_dir = None
+        self.streamflow_mask_dir = None
         self.cdl_year = cdl_year
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
@@ -354,6 +358,10 @@ class HydroML:
         """
 
         self.gw_basin_canal_raster_dir = make_proper_dir_name(self.file_dir + 'GW_Basin_Canal_Raster')
+        self.canal_rasters = [
+            self.gw_basin_canal_raster_dir + 'Canal_CO_River.tif',
+            self.gw_basin_canal_raster_dir + 'Canal_AZ.tif'
+        ]
         if not already_created:
             print('Creating GW Basin raster...')
             makedirs([self.gw_basin_canal_raster_dir])
@@ -377,11 +385,7 @@ class HydroML:
             canal_gdf_co_river.to_file(canal_co_shp_file)
             canal_gdf_az.to_file(canal_az_shp_file)
             canal_shps = [canal_co_shp_file, canal_az_shp_file]
-            canal_rasters = [
-                self.gw_basin_canal_raster_dir + 'Canal_CO_River.tif',
-                self.gw_basin_canal_raster_dir + 'Canal_AZ.tif'
-            ]
-            for canal_shp, canal_raster in zip(canal_shps, canal_rasters):
+            for canal_shp, canal_raster in zip(canal_shps, self.canal_rasters):
                 vops.shp2raster(
                     canal_shp, canal_raster,
                     xres=xres, yres=yres,
@@ -391,6 +395,31 @@ class HydroML:
                 )
 
         print('GW Basin and Canal rasters created...')
+
+    def create_streamflow_rasters(self, daily_streamflow_file, year_list, start_month, end_month,
+                                  already_created=False):
+        """
+        Create streamflow raster using USGS daily streamflow data and Colorado Canal raster
+        :param daily_streamflow_file: Daily Streamflow file
+        :param year_list: List of years %yyyy format
+        :param start_month: Data start month, %m format
+        :param end_month: Data end month, %m format
+        :param already_created: Set True if raster already exists
+        :return: None
+        """
+
+        self.streamflow_dir = make_proper_dir_name(self.file_dir + 'Streamflow_Rasters')
+        if not already_created:
+            print('Creating streamflow rasters...')
+            makedirs([self.streamflow_dir])
+            rops.create_streamflow_rasters(
+                self.canal_rasters[0],
+                daily_streamflow_file,
+                year_list,
+                start_month,
+                end_month,
+                self.streamflow_dir
+            )
 
     def create_gw_rasters(self, xres=5000., yres=5000., max_gw=1000., value_field=None, value_field_pos=0,
                           convert_units=True, already_created=True):
@@ -539,10 +568,11 @@ class HydroML:
         self.well_reg_reproj_dir = self.well_reg_dir + 'Well_Reg_Reproj/'
         self.sed_thick_reproj_dir = self.sed_thick_dir + 'Reproj/'
         self.gw_basin_canal_raster_reproj_dir = self.gw_basin_canal_raster_dir + 'Reproj/'
+        self.streamflow_reproj_dir = self.streamflow_dir + 'Reproj/'
         if not already_reprojected:
             print('Reprojecting rasters...')
             makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir,
-                      self.sed_thick_reproj_dir, self.gw_basin_canal_raster_reproj_dir])
+                      self.sed_thick_reproj_dir, self.gw_basin_canal_raster_reproj_dir, self.streamflow_reproj_dir])
             rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
                                    pattern=pattern, gdal_path=self.gdal_path)
             rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_reproj_dir,
@@ -554,6 +584,8 @@ class HydroML:
             rops.reproject_rasters(self.gw_basin_canal_raster_dir, ref_raster=self.ref_raster,
                                    outdir=self.gw_basin_canal_raster_reproj_dir, pattern=pattern,
                                    gdal_path=self.gdal_path)
+            rops.reproject_rasters(self.streamflow_dir, ref_raster=self.ref_raster, outdir=self.streamflow_reproj_dir,
+                                   pattern=pattern, gdal_path=self.gdal_path)
             if self.ssebop_link:
                 makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
                 rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
@@ -637,10 +669,11 @@ class HydroML:
         self.crop_coeff_mask_dir = make_proper_dir_name(self.raster_mask_dir + 'Masked_Crop_Coeff')
         self.well_reg_mask_dir = make_proper_dir_name(self.well_reg_dir + 'Masked')
         self.canal_mask_dir = make_proper_dir_name(self.gw_basin_canal_raster_reproj_dir + 'Masked')
+        self.streamflow_mask_dir = make_proper_dir_name(self.streamflow_reproj_dir + 'Masked')
         if not already_masked:
             print('Masking rasters...')
             makedirs([self.raster_mask_dir, self.lu_mask_dir, self.crop_coeff_mask_dir, self.well_reg_mask_dir,
-                      self.canal_mask_dir])
+                      self.canal_mask_dir, self.streamflow_mask_dir])
             rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
                               pattern=pattern)
             rops.mask_rasters(self.crop_coeff_reproj_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_mask_dir,
@@ -649,6 +682,8 @@ class HydroML:
                               pattern=pattern)
             rops.mask_rasters(self.gw_basin_canal_raster_reproj_dir, ref_raster=self.ref_raster,
                               outdir=self.canal_mask_dir, pattern='Canal*.tif')
+            rops.mask_rasters(self.streamflow_reproj_dir, ref_raster=self.ref_raster, outdir=self.streamflow_mask_dir,
+                              pattern=pattern)
             for lu_dir in self.land_use_dir_list:
                 rops.mask_rasters(lu_dir, ref_raster=self.ref_raster, outdir=self.lu_mask_dir, pattern=pattern)
         else:
@@ -693,7 +728,8 @@ class HydroML:
                        pattern_list=[pattern], rep=True, verbose=verbose)
             copy_files([self.canal_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
                        pattern_list=[pattern], rep=True, verbose=verbose)
-
+            copy_files([self.streamflow_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
+                       pattern_list=[pattern], verbose=verbose)
             input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
             pattern_list = [pattern] * len(input_dir_list)
             copy_files(input_dir_list, target_dir=self.pred_data_dir, year_list=year_list, pattern_list=pattern_list,
@@ -707,6 +743,8 @@ class HydroML:
                        pattern_list=[pattern], rep=True, verbose=verbose)
             copy_files([self.gw_basin_canal_raster_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
                        pattern_list=['Canal*.tif'], rep=True, verbose=verbose)
+            copy_files([self.streamflow_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
+                       pattern_list=[pattern], verbose=verbose)
             print('Creating dataframe...')
             gw_file = self.input_ama_ina_reproj_file
             label_attr = 'NAME_ABBR'
@@ -870,6 +908,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     grace_csv = input_dir + 'GRACE/TWS_GRACE.csv'
     ssebop_link = 'https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/uswem/web/conus/eta/modis_eta/monthly/' \
                   'downloads/'
+    streamflow_file = '../Inputs/Data/Arizona_GW/Streamflow/dv.txt'
     sed_thick_csv = input_dir + 'Sediment_Thickness/Sedthick_LLz.csv'
     data_year_list = range(2002, 2021)
     data_start_month = 1
@@ -885,7 +924,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal')
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River')
     test_years = range(2010, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
@@ -922,6 +961,8 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_gw_basin_canal_rasters(xres=xres, yres=yres, already_created=load_files)
+        gw.create_streamflow_rasters(streamflow_file, data_year_list, data_start_month, data_end_month,
+                                     already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True

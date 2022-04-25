@@ -97,5 +97,6 @@ def copy_files(input_dir_list, target_dir, pattern_list, year_list, rep=False, v
                 if int(year) in year_list:
                     copy_file(f, outfile, suffix=year, ext=ext, verbose=verbose)
             else:
+                outfile = '{}{}_'.format(target_dir, file_name[:ext_sep])
                 for year in year_list:
                     copy_file(f, outfile, suffix=str(year), ext=ext, verbose=verbose)
