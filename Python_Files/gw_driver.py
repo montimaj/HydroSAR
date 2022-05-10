@@ -924,7 +924,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ')
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River')
     test_years = range(2010, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
@@ -933,13 +933,13 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     test_ama_ina = ()
     if ama_ina_train:
         test_ama_ina = ('HAR',)
-    xres, yres = 2000, 2000
+    xres, yres = 3000, 3000
     cdl_year = None
     ws_stress_dict = {
         'spatial': ('P*.tif', 'SSEBop*.tif', 'AGRI_flt*.tif', 'URBAN_flt*.tif'),
         'temporal': ('P*.tif', 'SSEBop*.tif', 'AGRI_Mean*.tif', 'URBAN_Mean*.tif')
     }
-    sf_flt_list = list(range(4, 5))
+    sf_flt_list = list(range(1, 11))
     if not analyze_only:
         gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                      input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
@@ -954,6 +954,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
+        load_files = False
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
         gw.create_sed_thickness_raster(xres=xres, yres=yres, already_converted=True, already_clipped=True,
                                        already_created=load_files)
@@ -965,7 +966,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                      already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
-        load_gw_info = True
+        load_gw_info = False
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
@@ -981,10 +982,10 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
             df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(),
                                      load_df=load_df, load_gw_info=load_gw_info)
             dattr = list(drop_attrs) + ['GW_NAME']
-            rf_model = gw.build_model(df, n_estimators=500, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=7,
+            rf_model = gw.build_model(df, n_estimators=100, test_year=test_years, drop_attrs=dattr,
+                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=5,
                                       plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
-                                      spatio_temporal=False, shuffle=True, random_state=0)
+                                      spatio_temporal=True, shuffle=True, random_state=42)
             actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
                                                             drop_attrs=drop_attrs, pred_attr=pred_attr,
                                                             exclude_vars=exclude_vars, exclude_years=(),
@@ -1007,5 +1008,5 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=True, load_df=False,
+    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
            ama_ina_train=False)

@@ -280,13 +280,13 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
         sep_pos = input_shp_file.rfind('/')
     layer_name = input_shp_file[sep_pos + 1: ext_pos]
     shp_file = gpd.read_file(input_shp_file)
-    if value_field is None:
+    if value_field is None and burn_value is None:
         value_field = shp_file.columns[value_field_pos]
     minx, miny, maxx, maxy = shp_file.geometry.total_bounds
     no_data_value = NO_DATA_VALUE
     gdal_command = 'gdal_rasterize'
     if not gridding:
-        args = ['-l', layer_name, '-a', value_field, '-tr', str(xres), str(yres), '-te', str(minx),
+        args = ['-l', layer_name, '-tr', str(xres), str(yres), '-te', str(minx),
                 str(miny), str(maxx), str(maxy), '-ot', 'Float32', '-of', 'GTiff',
                 '-a_nodata', str(no_data_value)]
         if burn_value is not None:
@@ -295,6 +295,8 @@ def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0
             args += ['-add']
         if init_zero:
             args += ['-init', str(0.0)]
+        if value_field:
+            args += ['-a', str(value_field)]
         args += [input_shp_file, outfile_path]
     else:
         gdal_command = 'gdal_grid'
