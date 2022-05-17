@@ -933,7 +933,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     test_ama_ina = ()
     if ama_ina_train:
         test_ama_ina = ('HAR',)
-    xres, yres = 3000, 3000
+    xres, yres = 5000, 5000
     cdl_year = None
     ws_stress_dict = {
         'spatial': ('P*.tif', 'SSEBop*.tif', 'AGRI_flt*.tif', 'URBAN_flt*.tif'),
@@ -954,7 +954,6 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                              already_preprocessed=load_files)
         gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
-        load_files = False
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
         gw.create_sed_thickness_raster(xres=xres, yres=yres, already_converted=True, already_clipped=True,
                                        already_created=load_files)
@@ -966,7 +965,8 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                                      already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
-        load_gw_info = False
+        load_gw_info = True
+        load_files = False
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
@@ -1009,4 +1009,4 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
 
 if __name__ == '__main__':
     run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
-           ama_ina_train=False)
+           ama_ina_train=True)

@@ -8,9 +8,9 @@ mytheme = list(
 )
 
 
-merged_df <- read.csv('D:/HydroMST/Paper2/Results_New/Scale/Spatial/merged.csv')
+merged_df <- read.csv('../../Outputs/Results_SA/Merged_S.csv')
 scale <- as.factor(merged_df$Scale)
-tiff("D:/HydroMST/Paper2/Figures_New/SA/SA_S.tif", width=7, height=5, units='in', res=600)
+tiff("D:/HydroMST/Paper2/Figures_Revision/SA/SA_S.tif", width=7, height=5, units='in', res=600)
 
 ggplot(data = merged_df, aes(x=Window, y=Test_Score)) + 
   mytheme + 
@@ -22,9 +22,9 @@ ggplot(data = merged_df, aes(x=Window, y=Test_Score)) +
 dev.off()
 
 
-merged_df <- read.csv('D:/HydroMST/Paper2/Results_New/Scale/ST/merged.csv')
+merged_df <- read.csv('../../Outputs/Results_SA/Merged_ST.csv')
 scale <- as.factor(merged_df$Scale)
-tiff("D:/HydroMST/Paper2/Figures_New/SA/SA_ST.tif", width=7, height=5, units='in', res=600)
+tiff("D:/HydroMST/Paper2/Figures_Revision/SA/SA_ST.tif", width=7, height=5, units='in', res=600)
 
 ggplot(data = merged_df, aes(x=Window, y=Test_Score)) + 
   mytheme + 
@@ -37,9 +37,9 @@ dev.off()
 
 
 
-merged_df <- read.csv('D:/HydroMST/Paper2/Results_New/Scale/Temporal/merged.csv')
+merged_df <- read.csv('../../Outputs/Results_SA/Merged_T.csv')
 scale <- as.factor(merged_df$Scale)
-tiff("D:/HydroMST/Paper2/Figures_New/SA/SA_T.tif", width=7, height=5, units='in', res=600)
+tiff("D:/HydroMST/Paper2/Figures_Revision/SA/SA_T.tif", width=7, height=5, units='in', res=600)
 
 ggplot(data = merged_df, aes(x=Window, y=Test_Score)) + 
   mytheme + 
