@@ -1156,6 +1156,25 @@ def create_crop_coeff_raster(input_cdl_dir, output_dir):
         write_raster(crop_coeff_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
 
 
+def create_alfalfa_rasters(input_cdl_dir, output_dir):
+    """
+    Create alfalfa rasters based on NASS CDL files
+    :param input_cdl_dir: Input CDL directory
+    :param output_dir: Output CDL directory
+    :return: None
+    """
+
+    input_cdl_files = sorted(glob(input_cdl_dir + '*.tif'))
+    for input_cdl_file in input_cdl_files:
+        year = input_cdl_file[input_cdl_file.rfind('_') + 1: input_cdl_file.rfind('.')]
+        print('Creating alfalfa raster for', year)
+        cdl_arr, cdl_file = read_raster_as_arr(input_cdl_file)
+        alfalfa_arr = np.zeros_like(cdl_arr)
+        alfalfa_arr[cdl_arr == 36] = 1
+        output_file = output_dir + 'Alfalfa_{}.tif'.format(year)
+        write_raster(alfalfa_arr, cdl_file, transform=cdl_file.transform, outfile_path=output_file)
+
+
 def create_mean_crop_coeff_raster(input_cdl_dir, output_dir):
     """
     Create crop coefficient raster based on the NASS CDL file
@@ -1373,26 +1392,31 @@ def get_gw_info_arr(input_raster_file, input_gw_shp_file, output_dir, label_attr
     return gw_arr
 
 
-def postprocess_rasters(input_raster_dir, output_dir, well_registry_raster_file, pattern='*.tif'):
+def postprocess_rasters(input_raster_dir, output_dir, alfalfa_mf_dir, pattern='*.tif'):
     """
-    Postprocess rasters by setting zero values to pixels having no wells
+    Postprocess rasters based on alfalfa multiplication factor
     :param input_raster_dir: Input directory containing predicted GW pumping rasters
     :param output_dir: Output directory
-    :param well_registry_raster_file: Well registry raster file containing locations of all the wells.
-    Must have the same CRS as the predicted rasters
+    :param alfalfa_mf_dir: Alfalfa MF raster directory
     :param pattern: Raster file pattern
     :return: None
     """
 
     gw_rasters = sorted(glob(input_raster_dir + pattern))
-    well_reg_arr = read_raster_as_arr(well_registry_raster_file, get_file=False)
-    for raster_file in gw_rasters:
-        print('Post processing', raster_file, '...')
-        gw_raster_arr, gw_raster_file = read_raster_as_arr(raster_file)
-        output_file = output_dir + raster_file[raster_file.rfind(os.sep) + 1:]
-        gw_raster_arr[well_reg_arr == 0] = 0
+    alfalfa_mf_rasters = sorted(glob(alfalfa_mf_dir + pattern))
+    for gw_raster_file, alfalfa_mf_file in zip(gw_rasters, alfalfa_mf_rasters):
+        print('Post processing', gw_raster_file, '...')
+        gw_raster_arr, gw_rio_file = read_raster_as_arr(gw_raster_file)
+        alfalfa_mf_arr = read_raster_as_arr(alfalfa_mf_file, get_file=False)
+        output_file = output_dir + gw_raster_file[gw_raster_file.rfind(os.sep) + 1:]
+        gw_raster_arr *= alfalfa_mf_arr
         gw_raster_arr[np.isnan(gw_raster_arr)] = NO_DATA_VALUE
-        write_raster(gw_raster_arr, gw_raster_file, transform=gw_raster_file.transform, outfile_path=output_file)
+        write_raster(
+            gw_raster_arr,
+            gw_rio_file,
+            transform=gw_raster_file.transform,
+            outfile_path=output_file
+        )
 
 
 def create_sed_thickness_raster(input_sed_thick_shp_file, output_sed_thick_raster, gdal_path, xres=5000., yres=5000.):

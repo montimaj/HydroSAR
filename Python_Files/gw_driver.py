@@ -17,7 +17,7 @@ class HydroML:
     def __init__(self, input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
                  input_state_file, gdal_path, input_ts_dir=None, input_subsidence_dir=None, input_gw_boundary_file=None,
                  input_ama_ina_file=None, input_watershed_file=None, input_gw_basin=None, input_canal=None,
-                 ssebop_link=None, sed_thick_csv=None, cdl_year=None):
+                 ssebop_link=None, sed_thick_csv=None, cdl_year=None, alfalfa_mf_file=None):
         """
         Constructor for initializing class variables
         :param input_dir: Input data directory
@@ -39,6 +39,7 @@ class HydroML:
         :param cdl_year: Set CDL year for using a single year for the entire model. If set to None, all available CDL
         data for the years in year_list will be downloaded (Note: for years before 2008, CDL 2008 will be replicated if
         cdl_year is None).
+        :param alfalfa_mf_file: Alfalfa multiplication factor shapefile
         """
 
         self.input_dir = make_proper_dir_name(input_dir)
@@ -70,6 +71,9 @@ class HydroML:
         self.crop_coeff_dir = None
         self.crop_coeff_reproj_dir = None
         self.crop_coeff_mask_dir = None
+        self.alfalfa_dir = None
+        self.alfalfa_reproj_dir = None
+        self.alfalfa_mask_dir = None
         self.cdl_reclass_dir = None
         self.raster_mask_dir = None
         self.land_use_dir_list = None
@@ -110,6 +114,11 @@ class HydroML:
         self.streamflow_dir = None
         self.streamflow_reproj_dir = None
         self.streamflow_mask_dir = None
+        self.alfalfa_mf_file = alfalfa_mf_file
+        self.alfalfa_mf_reproj_file = None
+        self.alfalfa_mf_raster_dir = None
+        self.alfalfa_mf_reproj_dir = None
+        self.alfalfa_mf_mask_dir = None
         self.cdl_year = cdl_year
         makedirs([self.output_dir, self.output_gw_raster_dir, self.output_shp_dir])
 
@@ -239,6 +248,7 @@ class HydroML:
         gw_ama_ina_reproj_dir = make_proper_dir_name(self.file_dir + 'gw_ama_ina/reproj')
         watershed_reproj_dir = make_proper_dir_name(self.file_dir + 'watershed/reproj')
         state_reproj_dir = make_proper_dir_name(self.file_dir + 'state/reproj')
+        alfalfa_mf_shp_reproj_dir = make_proper_dir_name(self.file_dir + 'Alfalfa_MF/reproj')
         self.gw_basin_canal_reproj_dir = make_proper_dir_name(self.file_dir + 'GW_Basin_Canal/reproj')
         self.input_gw_boundary_reproj_file = gw_boundary_reproj_dir + 'input_boundary_reproj.shp'
         if self.input_ama_ina_file:
@@ -249,31 +259,31 @@ class HydroML:
             self.input_gw_basin_reproj_file = self.gw_basin_canal_reproj_dir + 'input_gw_basin_reproj.shp'
         if self.input_canal:
             self.input_canal_reproj_file = self.gw_basin_canal_reproj_dir + 'input_canal_reproj.shp'
+        if self.alfalfa_mf_file:
+            self.alfalfa_mf_reproj_file = alfalfa_mf_shp_reproj_dir + 'Alfalfa_MF_Reproj.shp'
         self.input_state_reproj_file = state_reproj_dir + 'input_state_reproj.shp'
         if not already_reprojected:
-            print('Reprojecting Boundary/State/AMA_INA/Watershed shapefiles...')
-            makedirs([gw_boundary_reproj_dir, state_reproj_dir])
+            print('Reprojecting Boundary/State/AMA_INA/Watershed/Canal/Alfalfa MF shapefiles...')
             ref_shp = glob(self.output_shp_dir + '*.shp')[0]
-            vops.reproject_vector(self.input_gw_boundary_file, outfile_path=self.input_gw_boundary_reproj_file,
-                                  ref_file=ref_shp, raster=False)
-            if self.input_ama_ina_file:
-                makedirs([gw_ama_ina_reproj_dir])
-                vops.reproject_vector(self.input_ama_ina_file, outfile_path=self.input_ama_ina_reproj_file,
-                                      ref_file=ref_shp, raster=False)
-            if self.input_watershed_file:
-                makedirs([watershed_reproj_dir])
-                vops.reproject_vector(self.input_watershed_file, outfile_path=self.input_watershed_reproj_file,
-                                      ref_file=ref_shp, raster=False)
-            if self.input_gw_basin:
-                makedirs([self.gw_basin_canal_reproj_dir])
-                vops.reproject_vector(self.input_gw_basin, outfile_path=self.input_gw_basin_reproj_file,
-                                      ref_file=ref_shp, raster=False)
-            if self.input_canal:
-                makedirs([self.gw_basin_canal_reproj_dir])
-                vops.reproject_vector(self.input_canal, outfile_path=self.input_canal_reproj_file,
-                                      ref_file=ref_shp, raster=False)
-            vops.reproject_vector(self.input_state_file, outfile_path=self.input_state_reproj_file, ref_file=ref_shp,
-                                  raster=False)
+            shp_file_list = [
+                (self.input_gw_boundary_file, self.input_gw_boundary_reproj_file, gw_boundary_reproj_dir),
+                (self.input_state_file, self.input_state_reproj_file, state_reproj_dir),
+                (self.input_ama_ina_file, self.input_gw_boundary_reproj_file, gw_ama_ina_reproj_dir),
+                (self.input_watershed_file, self.input_watershed_reproj_file, watershed_reproj_dir),
+                (self.input_gw_basin, self.input_gw_basin_reproj_file, self.gw_basin_canal_reproj_dir),
+                (self.input_canal, self.input_canal_reproj_file, self.gw_basin_canal_reproj_dir),
+                (self.alfalfa_mf_file, self.alfalfa_mf_reproj_file, alfalfa_mf_shp_reproj_dir)
+            ]
+            for item in shp_file_list:
+                input_file, output_file, output_dir = item
+                if input_file:
+                    makedirs([output_dir])
+                    vops.reproject_vector(
+                        input_file,
+                        outfile_path=output_file,
+                        ref_file=ref_shp,
+                        raster=False
+                    )
         else:
             print('Boundary/State/AMA_INA shapefiles are already reprojected')
 
@@ -471,6 +481,41 @@ class HydroML:
             makedirs([self.crop_coeff_dir])
             rops.create_crop_coeff_raster(self.cdl_file_dir, output_dir=self.crop_coeff_dir)
 
+    def create_alfalfa_rasters(self, already_created=False):
+        """
+        Create alfalfa rasters based on the NASS CDL files for each year
+        :param already_created: Set True to disable raster creation
+        :return: None
+        """
+
+        self.alfalfa_dir = make_proper_dir_name(self.file_dir + 'Alfalfa')
+        if not already_created:
+            print('Creating alfalfa rasters...')
+            makedirs([self.alfalfa_dir])
+            rops.create_alfalfa_rasters(self.cdl_file_dir, output_dir=self.alfalfa_dir)
+
+    def create_alfalfa_mf_rasters(self, xres=2000., yres=2000., already_created=False):
+        """
+        Create alfalfa multiplication factor (MF) rasters based on the Alfalfa MF shapefile
+        :param xres: X-Resolution (map unit)
+        :param yres: Y-Resolution (map unit)
+        :param already_created: Set True to disable raster creation
+        :return: None
+        """
+
+        self.alfalfa_mf_raster_dir = make_proper_dir_name(self.file_dir + 'Alfalfa_MF_Rasters')
+        if not already_created:
+            print('Creating alfalfa mf rasters...')
+            makedirs([self.alfalfa_mf_raster_dir])
+            vops.create_alfalfa_mf_rasters(
+                self.alfalfa_mf_reproj_file,
+                self.alfalfa_mf_raster_dir,
+                self.data_year_list,
+                xres,
+                yres,
+                self.gdal_path
+            )
+
     def create_mean_crop_coeff_raster(self, already_created=False):
         """
         Create mean crop coefficient raster based on the annual CDL files which are already reprojected
@@ -504,15 +549,29 @@ class HydroML:
             vops.csv2shp(self.sed_thick_csv, sed_thick_shp, long_lat_pos=(0, 1))
         if not already_clipped:
             print('Reprojecting sediment thickness shapefile...')
-            vops.reproject_vector(sed_thick_shp, sed_thick_shp, self.input_state_reproj_file,
-                                  raster=False)
+            vops.reproject_vector(
+                sed_thick_shp,
+                sed_thick_shp,
+                self.input_state_reproj_file,
+                raster=False
+            )
             print('Clipping sediment thickness shapefile...')
-            vops.clip_vector(sed_thick_shp, self.input_state_reproj_file, self.sed_thick_shp_file,
-                             gdal_path=self.gdal_path, extent_clip=False)
+            vops.clip_vector(
+                sed_thick_shp,
+                self.input_state_reproj_file,
+                self.sed_thick_shp_file,
+                gdal_path=self.gdal_path,
+                extent_clip=False
+            )
         if not already_created:
             print('Creating sediment thickness raster...')
-            rops.create_sed_thickness_raster(self.sed_thick_shp_file, self.sed_thick_raster_file, self.gdal_path,
-                                                 xres, yres)
+            rops.create_sed_thickness_raster(
+                self.sed_thick_shp_file,
+                self.sed_thick_raster_file,
+                self.gdal_path,
+                xres,
+                yres
+            )
         print('Sediment thickness raster created...')
 
     def reclassify_cdl(self, reclass_dict, pattern='*.tif', already_reclassified=False):
@@ -529,8 +588,13 @@ class HydroML:
         self.ref_raster = glob(self.actual_gw_dir + pattern)[0]
         if not already_reclassified:
             makedirs([self.cdl_reclass_dir])
-            rops.reclassify_cdl_files(self.cdl_file_dir, self.cdl_reclass_dir, reclass_dict, self.ref_raster,
-                                      self.gdal_path)
+            rops.reclassify_cdl_files(
+                self.cdl_file_dir,
+                self.cdl_reclass_dir,
+                reclass_dict,
+                self.ref_raster,
+                self.gdal_path
+            )
         else:
             print('Already reclassified')
 
@@ -547,9 +611,14 @@ class HydroML:
         if not already_organized:
             print('Organizing subsidence rasters...')
             makedirs([self.converted_subsidence_dir])
-            rops.organize_subsidence_data(self.input_subsidence_dir, output_dir=self.converted_subsidence_dir,
-                                          ref_raster=self.ref_raster, gdal_path=self.gdal_path,
-                                          decorrelated_value=decorrelated_value, verbose=verbose)
+            rops.organize_subsidence_data(
+                self.input_subsidence_dir,
+                output_dir=self.converted_subsidence_dir,
+                ref_raster=self.ref_raster,
+                gdal_path=self.gdal_path,
+                decorrelated_value=decorrelated_value,
+                verbose=verbose
+            )
         print('Organized and created subsidence rasters...')
 
     def reproject_rasters(self, pattern='*.tif', already_reprojected=False):
@@ -565,42 +634,59 @@ class HydroML:
         self.ws_data_reproj_dir = self.file_dir + 'WS_Reproj_Rasters/'
         self.ws_ssebop_reproj_dir = self.file_dir + 'WS_SSEBop_Reproj_Rasters/'
         self.crop_coeff_reproj_dir = self.crop_coeff_dir + 'Crop_Coeff_Reproj/'
+        self.alfalfa_reproj_dir = self.alfalfa_dir + 'Alfalfa_Reproj/'
         self.well_reg_reproj_dir = self.well_reg_dir + 'Well_Reg_Reproj/'
         self.sed_thick_reproj_dir = self.sed_thick_dir + 'Reproj/'
         self.gw_basin_canal_raster_reproj_dir = self.gw_basin_canal_raster_dir + 'Reproj/'
         self.streamflow_reproj_dir = self.streamflow_dir + 'Reproj/'
+        self.alfalfa_mf_reproj_dir = self.alfalfa_mf_raster_dir + 'Reproj/'
         if not already_reprojected:
             print('Reprojecting rasters...')
-            makedirs([self.raster_reproj_dir, self.crop_coeff_reproj_dir, self.well_reg_reproj_dir,
-                      self.sed_thick_reproj_dir, self.gw_basin_canal_raster_reproj_dir, self.streamflow_reproj_dir])
-            rops.reproject_rasters(self.input_ts_dir, ref_raster=self.ref_raster, outdir=self.raster_reproj_dir,
-                                   pattern=pattern, gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.crop_coeff_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_reproj_dir,
-                                   pattern=pattern, gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.well_reg_dir, ref_raster=self.ref_raster,
-                                   outdir=self.well_reg_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.sed_thick_dir, ref_raster=self.ref_raster, outdir=self.sed_thick_reproj_dir,
-                                   pattern='Sed_Thick.tif', gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.gw_basin_canal_raster_dir, ref_raster=self.ref_raster,
-                                   outdir=self.gw_basin_canal_raster_reproj_dir, pattern=pattern,
-                                   gdal_path=self.gdal_path)
-            rops.reproject_rasters(self.streamflow_dir, ref_raster=self.ref_raster, outdir=self.streamflow_reproj_dir,
-                                   pattern=pattern, gdal_path=self.gdal_path)
+            dir_list = [
+                (self.input_ts_dir, self.raster_reproj_dir, pattern),
+                (self.crop_coeff_dir, self.crop_coeff_reproj_dir, pattern),
+                (self.well_reg_dir, self.well_reg_reproj_dir, pattern),
+                (self.sed_thick_dir, self.sed_thick_reproj_dir, 'Sed_Thick.tif'),
+                (self.gw_basin_canal_raster_dir, self.gw_basin_canal_raster_reproj_dir, pattern),
+                (self.streamflow_dir, self.streamflow_reproj_dir, pattern),
+                (self.alfalfa_dir, self.alfalfa_reproj_dir, pattern),
+                (self.alfalfa_mf_raster_dir, self.alfalfa_mf_reproj_dir, pattern)
+            ]
             if self.ssebop_link:
-                makedirs([self.ssebop_reproj_dir, self.ws_ssebop_reproj_dir, self.ws_data_reproj_dir])
-                rops.reproject_rasters(self.ssebop_file_dir, ref_raster=self.ref_raster, outdir=self.ssebop_reproj_dir,
-                                       pattern=pattern, gdal_path=self.gdal_path)
-                rops.generate_cummulative_ssebop(self.ssebop_reproj_dir, year_list=self.data_year_list,
-                                                 start_month=self.data_start_month, end_month=self.data_end_month,
-                                                 out_dir=self.raster_reproj_dir)
+                dir_list += [
+                    (self.ssebop_file_dir, self.ssebop_reproj_dir, pattern)
+                ]
                 if self.ws_year_list is not None:
-                    rops.reproject_rasters(self.ws_ssebop_file_dir, ref_raster=self.ref_raster,
-                                           outdir=self.ws_ssebop_reproj_dir, pattern=pattern, gdal_path=self.gdal_path)
-                    rops.generate_cummulative_ssebop(self.ws_ssebop_reproj_dir, year_list=self.ws_year_list,
-                                                     start_month=self.ws_start_month, end_month=self.ws_end_month,
-                                                     out_dir=self.ws_data_reproj_dir)
-                    rops.reproject_rasters(self.ws_data_dir, ref_raster=self.ref_raster, outdir=self.ws_data_reproj_dir,
-                                           pattern=pattern, gdal_path=self.gdal_path)
+                    dir_list += [
+                        (self.ws_ssebop_file_dir, self.ws_ssebop_reproj_dir, pattern),
+                        (self.ws_data_dir, self.ws_data_reproj_dir, pattern)
+                    ]
+            for item in dir_list:
+                input_dir, output_dir, pattern = item
+                makedirs([output_dir])
+                rops.reproject_rasters(
+                    input_dir,
+                    ref_raster=self.ref_raster,
+                    outdir=output_dir,
+                    pattern=pattern,
+                    gdal_path=self.gdal_path
+                )
+            if self.ssebop_link:
+                rops.generate_cummulative_ssebop(
+                    self.ssebop_reproj_dir,
+                    year_list=self.data_year_list,
+                    start_month=self.data_start_month,
+                    end_month=self.data_end_month,
+                    out_dir=self.raster_reproj_dir
+                )
+                if self.ws_year_list is not None:
+                    rops.generate_cummulative_ssebop(
+                        self.ws_ssebop_reproj_dir,
+                        year_list=self.ws_year_list,
+                        start_month=self.ws_start_month,
+                        end_month=self.ws_end_month,
+                        out_dir=self.ws_data_reproj_dir
+                    )
         else:
             print('All rasters already reprojected')
 
@@ -670,22 +756,35 @@ class HydroML:
         self.well_reg_mask_dir = make_proper_dir_name(self.well_reg_dir + 'Masked')
         self.canal_mask_dir = make_proper_dir_name(self.gw_basin_canal_raster_reproj_dir + 'Masked')
         self.streamflow_mask_dir = make_proper_dir_name(self.streamflow_reproj_dir + 'Masked')
+        self.alfalfa_mask_dir = make_proper_dir_name(self.alfalfa_reproj_dir + 'Masked')
+        self.alfalfa_mf_mask_dir = make_proper_dir_name(self.alfalfa_mf_reproj_dir + 'Masked')
         if not already_masked:
             print('Masking rasters...')
-            makedirs([self.raster_mask_dir, self.lu_mask_dir, self.crop_coeff_mask_dir, self.well_reg_mask_dir,
-                      self.canal_mask_dir, self.streamflow_mask_dir])
-            rops.mask_rasters(self.raster_reproj_dir, ref_raster=self.ref_raster, outdir=self.raster_mask_dir,
-                              pattern=pattern)
-            rops.mask_rasters(self.crop_coeff_reproj_dir, ref_raster=self.ref_raster, outdir=self.crop_coeff_mask_dir,
-                              pattern=pattern)
-            rops.mask_rasters(self.well_reg_reproj_dir, ref_raster=self.ref_raster, outdir=self.well_reg_mask_dir,
-                              pattern=pattern)
-            rops.mask_rasters(self.gw_basin_canal_raster_reproj_dir, ref_raster=self.ref_raster,
-                              outdir=self.canal_mask_dir, pattern='Canal*.tif')
-            rops.mask_rasters(self.streamflow_reproj_dir, ref_raster=self.ref_raster, outdir=self.streamflow_mask_dir,
-                              pattern=pattern)
+            dir_list = [
+                (self.raster_reproj_dir, self.raster_mask_dir, pattern),
+                (self.crop_coeff_reproj_dir, self.crop_coeff_mask_dir, pattern),
+                (self.well_reg_reproj_dir, self.well_reg_mask_dir, pattern),
+                (self.gw_basin_canal_raster_reproj_dir, self.canal_mask_dir, 'Canal*.tif'),
+                (self.streamflow_reproj_dir, self.streamflow_mask_dir, pattern),
+                (self.alfalfa_reproj_dir, self.alfalfa_mask_dir, pattern),
+                (self.alfalfa_mf_reproj_dir, self.alfalfa_mf_mask_dir, pattern)
+            ]
+            for item in dir_list:
+                input_dir, output_dir, pattern = item
+                makedirs([output_dir])
+                rops.mask_rasters(
+                    input_dir,
+                    ref_raster=self.ref_raster,
+                    outdir=output_dir,
+                    pattern=pattern
+                )
             for lu_dir in self.land_use_dir_list:
-                rops.mask_rasters(lu_dir, ref_raster=self.ref_raster, outdir=self.lu_mask_dir, pattern=pattern)
+                rops.mask_rasters(
+                    lu_dir,
+                    ref_raster=self.ref_raster,
+                    outdir=self.lu_mask_dir,
+                    pattern=pattern
+                )
         else:
             print('All rasters already masked')
 
@@ -716,42 +815,59 @@ class HydroML:
         else:
             print('Copying files...')
             makedirs([self.rf_data_dir, self.pred_data_dir])
-            input_dir_list = [self.final_gw_dir] + [self.raster_mask_dir]
-            pattern_list = [pattern] * len(input_dir_list)
-            copy_files(input_dir_list, target_dir=self.rf_data_dir, year_list=year_list, pattern_list=pattern_list,
-                       verbose=verbose)
-            copy_files([self.crop_coeff_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
-                       pattern_list=[pattern], verbose=verbose)
-            copy_files([self.lu_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
-                       pattern_list=[pattern], verbose=verbose)
-            copy_files([self.well_reg_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
-                       pattern_list=[pattern], rep=True, verbose=verbose)
-            copy_files([self.canal_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
-                       pattern_list=[pattern], rep=True, verbose=verbose)
-            copy_files([self.streamflow_mask_dir], target_dir=self.rf_data_dir, year_list=year_list,
-                       pattern_list=[pattern], verbose=verbose)
-            input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
-            pattern_list = [pattern] * len(input_dir_list)
-            copy_files(input_dir_list, target_dir=self.pred_data_dir, year_list=year_list, pattern_list=pattern_list,
-                       verbose=verbose)
-            pattern_list = [pattern] * len(self.land_use_dir_list)
-            copy_files(self.land_use_dir_list, target_dir=self.pred_data_dir, year_list=year_list,
-                       pattern_list=pattern_list, verbose=verbose)
-            copy_files([self.crop_coeff_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
-                       pattern_list=[pattern], verbose=verbose)
-            copy_files([self.well_reg_flt_dir], target_dir=self.pred_data_dir, year_list=year_list,
-                       pattern_list=[pattern], rep=True, verbose=verbose)
-            copy_files([self.gw_basin_canal_raster_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
-                       pattern_list=['Canal*.tif'], rep=True, verbose=verbose)
-            copy_files([self.streamflow_reproj_dir], target_dir=self.pred_data_dir, year_list=year_list,
-                       pattern_list=[pattern], verbose=verbose)
+            mask_input_dir_list = [self.final_gw_dir] + [self.raster_mask_dir]
+            actual_input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
+            mask_dir_list = [
+                (mask_input_dir_list, [pattern] * len(mask_input_dir_list)),
+                ([self.crop_coeff_mask_dir], [pattern]),
+                ([self.lu_mask_dir], [pattern]),
+                ([self.well_reg_mask_dir], [pattern]),
+                ([self.canal_mask_dir], [pattern]),
+                ([self.streamflow_mask_dir], [pattern]),
+                ([self.alfalfa_mask_dir], [pattern])
+            ]
+            actual_dir_list = [
+                (actual_input_dir_list, [pattern] * len(actual_input_dir_list)),
+                (self.land_use_dir_list, [pattern] * len(self.land_use_dir_list)),
+                ([self.crop_coeff_reproj_dir], [pattern]),
+                ([self.well_reg_flt_dir], [pattern]),
+                ([self.gw_basin_canal_raster_reproj_dir], ['Canal*.tif']),
+                ([self.streamflow_reproj_dir], [pattern]),
+                ([self.alfalfa_reproj_dir], [pattern])
+            ]
+            for mask_item, actual_item in zip(mask_dir_list, actual_dir_list):
+                mask_list, mask_pattern = mask_item
+                actual_list, actual_pattern = actual_item
+                copy_files(
+                    mask_list,
+                    target_dir=self.rf_data_dir,
+                    year_list=year_list,
+                    pattern_list=mask_pattern,
+                    verbose=verbose
+                )
+                copy_files(
+                    actual_list,
+                    target_dir=self.pred_data_dir,
+                    year_list=year_list,
+                    pattern_list=actual_pattern,
+                    verbose=verbose
+                )
             print('Creating dataframe...')
             gw_file = self.input_ama_ina_reproj_file
             label_attr = 'NAME_ABBR'
-            df = rfr.create_dataframe(self.rf_data_dir, input_gw_file=gw_file, output_dir=self.output_dir,
-                                      label_attr=label_attr, column_names=column_names, make_year_col=True,
-                                      exclude_vars=exclude_vars, exclude_years=exclude_years, ordering=ordering,
-                                      load_gw_info=load_gw_info, remove_na=remove_na)
+            df = rfr.create_dataframe(
+                self.rf_data_dir,
+                input_gw_file=gw_file,
+                output_dir=self.output_dir,
+                label_attr=label_attr,
+                column_names=column_names,
+                make_year_col=True,
+                exclude_vars=exclude_vars,
+                exclude_years=exclude_years,
+                ordering=ordering,
+                load_gw_info=load_gw_info,
+                remove_na=remove_na
+            )
             return df
 
     def build_model(self, df, n_estimators=100, random_state=0, bootstrap=True, max_features=3, test_size=None,
@@ -787,12 +903,28 @@ class HydroML:
         print('Building RF Model...')
         plot_dir = make_proper_dir_name(self.output_dir + 'Partial_Plots/PDP_Data')
         makedirs([plot_dir])
-        rf_model = rfr.rf_regressor(df, self.output_dir, n_estimators=n_estimators, random_state=random_state,
-                                    pred_attr=pred_attr, drop_attrs=drop_attrs, test_year=test_year, test_gw=test_gw,
-                                    use_gw=use_gw, shuffle=shuffle, plot_graphs=plot_graphs, plot_3d=plot_3d,
-                                    split_attribute=split_attribute, bootstrap=bootstrap, plot_dir=plot_dir,
-                                    max_features=max_features, load_model=load_model, test_size=test_size,
-                                    calc_perm_imp=calc_perm_imp, spatio_temporal=spatio_temporal)
+        rf_model = rfr.rf_regressor(
+            df,
+            self.output_dir,
+            n_estimators=n_estimators,
+            random_state=random_state,
+            pred_attr=pred_attr,
+            drop_attrs=drop_attrs,
+            test_year=test_year,
+            test_gw=test_gw,
+            use_gw=use_gw,
+            shuffle=shuffle,
+            plot_graphs=plot_graphs,
+            plot_3d=plot_3d,
+            split_attribute=split_attribute,
+            bootstrap=bootstrap,
+            plot_dir=plot_dir,
+            max_features=max_features,
+            load_model=load_model,
+            test_size=test_size,
+            calc_perm_imp=calc_perm_imp,
+            spatio_temporal=spatio_temporal
+        )
         return rf_model
 
     def get_predictions(self, rf_model, pred_years, column_names=None, ordering=False, pred_attr='GW',
@@ -810,7 +942,7 @@ class HydroML:
         :param exclude_years: List of years to exclude from dataframe
         :param drop_attrs: Drop these specified attributes
         :param use_full_extent: Set True to predict over entire region
-        :param post_process: Set False to disable postprocessing
+        :param post_process: Set False to disable postprocessing based on alfalfa multiplication factor
         :return: Actual and Predicted raster directory paths
         """
 
@@ -820,17 +952,26 @@ class HydroML:
         actual_raster_dir = self.rf_data_dir
         if use_full_extent:
             actual_raster_dir = self.pred_data_dir
-        rfr.predict_rasters(rf_model, pred_years=pred_years, drop_attrs=drop_attrs, out_dir=self.pred_out_dir,
-                            actual_raster_dir=actual_raster_dir, pred_attr=pred_attr, only_pred=only_pred,
-                            exclude_vars=exclude_vars, exclude_years=exclude_years, column_names=column_names,
-                            ordering=ordering)
+        rfr.predict_rasters(
+            rf_model,
+            pred_years=pred_years,
+            drop_attrs=drop_attrs,
+            out_dir=self.pred_out_dir,
+            actual_raster_dir=actual_raster_dir,
+            pred_attr=pred_attr,
+            only_pred=only_pred,
+            exclude_vars=exclude_vars,
+            exclude_years=exclude_years,
+            column_names=column_names,
+            ordering=ordering
+        )
         if post_process:
             output_dir = make_proper_dir_name(self.pred_out_dir + 'Postprocessed')
             makedirs([output_dir])
-            well_mask = glob(self.well_reg_mask_dir + '*.tif')[0]
+            alfalfa_dir = self.alfalfa_mf_mask_dir
             if use_full_extent:
-                well_mask = self.well_reg_flt_file
-            rops.postprocess_rasters(self.pred_out_dir, output_dir, well_mask)
+                alfalfa_dir = self.alfalfa_mf_reproj_dir
+            rops.postprocess_rasters(self.pred_out_dir, output_dir, alfalfa_dir)
             self.pred_out_dir = output_dir
         return actual_raster_dir, self.pred_out_dir
 
@@ -902,6 +1043,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     input_canal = input_dir + 'Canals/canals_az.shp'
     input_gw_csv_dir = input_dir + 'GW_Data/'
     input_state_file = input_dir + 'Arizona/Arizona.shp'
+    alfalfa_mf_file = input_dir + 'Alfalfa_MF/multiplication_factor.shp'
     gdal_path = 'C:/OSGeo4W64/'
     actual_gw_dir = file_dir + 'RF_Data/'
     pred_gw_dir = output_dir + 'Predicted_Rasters/'
@@ -924,8 +1066,10 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (59.5, 61.5): 0,
                      (130.5, 195.5): 0
                      }
-    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River')
-    test_years = range(2010, 2021)
+    drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River', 'Alfalfa')
+    test_years = range(2008, 2017)
+    pred_years = range(2002, 2021)
+    # test_years = range(2002, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
@@ -933,80 +1077,180 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
     test_ama_ina = ()
     if ama_ina_train:
         test_ama_ina = ('HAR',)
-    xres, yres = 5000, 5000
+    xres, yres = 2000, 2000
     cdl_year = None
     ws_stress_dict = {
         'spatial': ('P*.tif', 'SSEBop*.tif', 'AGRI_flt*.tif', 'URBAN_flt*.tif'),
         'temporal': ('P*.tif', 'SSEBop*.tif', 'AGRI_Mean*.tif', 'URBAN_Mean*.tif')
     }
-    sf_flt_list = list(range(1, 11))
+    sf_flt_list = list(range(4, 5))
     if not analyze_only:
-        gw = HydroML(input_dir, file_dir, output_dir, output_shp_dir, output_gw_raster_dir,
-                     input_state_file, gdal_path, input_subsidence_dir=input_subsidence_dir,
-                     input_gw_boundary_file=input_well_reg_file, input_ama_ina_file=input_ama_ina_file,
-                     input_watershed_file=input_watershed_file, input_gw_basin=input_gw_basin, input_canal=input_canal,
-                     ssebop_link=ssebop_link, sed_thick_csv=sed_thick_csv, cdl_year=cdl_year)
-        gw.download_data(year_list=data_year_list, start_month=data_start_month, end_month=data_end_month,
-                         already_downloaded=load_files, already_extracted=load_files)
-        gw.download_ws_data(year_list=data_year_list, start_month=ws_start_month, end_month=ws_end_month,
-                            already_downloaded=load_files, already_extracted=load_files)
-        gw.preprocess_gw_csv(input_gw_csv_dir, fill_attr=fill_attr, filter_attr=filter_attr, use_only_ama_ina=False,
-                             already_preprocessed=load_files)
-        gw.reproject_shapefiles(already_reprojected=load_files)
-        gw.create_gw_rasters(already_created=load_files, value_field=fill_attr, xres=xres, yres=yres, max_gw=3000)
+        gw = HydroML(
+            input_dir,
+            file_dir,
+            output_dir,
+            output_shp_dir,
+            output_gw_raster_dir,
+            input_state_file,
+            gdal_path,
+            input_subsidence_dir=input_subsidence_dir,
+            input_gw_boundary_file=input_well_reg_file,
+            input_ama_ina_file=input_ama_ina_file,
+            input_watershed_file=input_watershed_file,
+            input_gw_basin=input_gw_basin,
+            alfalfa_mf_file=alfalfa_mf_file,
+            input_canal=input_canal,
+            ssebop_link=ssebop_link,
+            sed_thick_csv=sed_thick_csv,
+            cdl_year=cdl_year
+        )
+        gw.download_data(
+            year_list=data_year_list,
+            start_month=data_start_month,
+            end_month=data_end_month,
+            already_downloaded=load_files,
+            already_extracted=load_files
+        )
+        gw.download_ws_data(
+            year_list=data_year_list,
+            start_month=ws_start_month,
+            end_month=ws_end_month,
+            already_downloaded=load_files,
+            already_extracted=load_files
+        )
+        gw.preprocess_gw_csv(
+            input_gw_csv_dir,
+            fill_attr=fill_attr,
+            filter_attr=filter_attr,
+            use_only_ama_ina=False,
+            already_preprocessed=load_files
+        )
+        gw.reproject_shapefiles(already_reprojected=False)
+        gw.create_gw_rasters(
+            already_created=load_files,
+            value_field=fill_attr,
+            xres=xres,
+            yres=yres,
+            max_gw=3000
+        )
         gw.create_well_registry_raster(xres=xres, yres=yres, already_created=load_files)
-        gw.create_sed_thickness_raster(xres=xres, yres=yres, already_converted=True, already_clipped=True,
-                                       already_created=load_files)
+        gw.create_sed_thickness_raster(
+            xres=xres,
+            yres=yres,
+            already_converted=load_files,
+            already_clipped=load_files,
+            already_created=load_files
+        )
         gw.crop_gw_rasters(use_ama_ina=False, already_cropped=load_files)
         gw.reclassify_cdl(az_class_dict, already_reclassified=load_files)
         gw.create_crop_coeff_raster(already_created=load_files)
         gw.create_gw_basin_canal_rasters(xres=xres, yres=yres, already_created=load_files)
-        gw.create_streamflow_rasters(streamflow_file, data_year_list, data_start_month, data_end_month,
-                                     already_created=load_files)
+        gw.create_streamflow_rasters(
+            streamflow_file,
+            data_year_list,
+            data_start_month,
+            data_end_month,
+            already_created=load_files
+        )
+        gw.create_alfalfa_rasters(already_created=load_files)
+        load_files = False
+        gw.create_alfalfa_mf_rasters(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True
-        load_files = False
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
             if ama_ina_train:
                 ws_pattern_list = ws_stress_dict['temporal']
-            gw.create_water_stress_index_rasters(already_created=load_files, normalize=False,
-                                                 pattern_list=ws_pattern_list)
+            gw.create_water_stress_index_rasters(
+                already_created=load_files,
+                normalize=False,
+                pattern_list=ws_pattern_list
+            )
             if subsidence_analysis:
                 gw.organize_subsidence_rasters(already_organized=load_files)
             gw.mask_rasters(already_masked=load_files)
             if idx > 0:
                 load_gw_info = True
-            df = gw.create_dataframe(year_list=range(2002, 2021), exclude_vars=exclude_vars, exclude_years=(),
-                                     load_df=load_df, load_gw_info=load_gw_info)
+            df = gw.create_dataframe(
+                year_list=pred_years,
+                exclude_vars=exclude_vars,
+                exclude_years=(),
+                load_df=load_df,
+                load_gw_info=load_gw_info
+            )
             dattr = list(drop_attrs) + ['GW_NAME']
-            rf_model = gw.build_model(df, n_estimators=100, test_year=test_years, drop_attrs=dattr,
-                                      pred_attr=pred_attr, load_model=load_rf_model, max_features=5,
-                                      plot_graphs=False, use_gw=ama_ina_train, test_gw=test_ama_ina,
-                                      spatio_temporal=True, shuffle=True, random_state=42)
-            actual_gw_dir, pred_gw_dir = gw.get_predictions(rf_model=rf_model, pred_years=range(2002, 2021),
-                                                            drop_attrs=drop_attrs, pred_attr=pred_attr,
-                                                            exclude_vars=exclude_vars, exclude_years=(),
-                                                            only_pred=False, use_full_extent=subsidence_analysis,
-                                                            post_process=False)
+            rf_model = gw.build_model(
+                df,
+                n_estimators=100,
+                test_year=test_years,
+                drop_attrs=dattr,
+                pred_attr=pred_attr,
+                load_model=load_rf_model,
+                max_features=5,
+                plot_graphs=False,
+                use_gw=ama_ina_train,
+                test_gw=test_ama_ina,
+                spatio_temporal=False,
+                shuffle=True,
+                random_state=42
+            )
+            actual_gw_dir, pred_gw_dir = gw.get_predictions(
+                rf_model=rf_model,
+                pred_years=pred_years,
+                drop_attrs=drop_attrs,
+                pred_attr=pred_attr,
+                exclude_vars=exclude_vars,
+                exclude_years=(),
+                only_pred=False,
+                use_full_extent=subsidence_analysis,
+                post_process=True
+            )
             if subsidence_analysis:
-                gw.create_subsidence_pred_gw_rasters(already_created=False, verbose=False, scale_to_cm=False)
+                gw.create_subsidence_pred_gw_rasters(
+                    already_created=False,
+                    verbose=False,
+                    scale_to_cm=False
+                )
             if len(sf_flt_list) == 1:
                 input_gw_file = file_dir + 'gw_ama_ina/reproj/input_ama_ina_reproj.shp'
-                ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=True, input_gw_file=input_gw_file,
-                                out_dir=output_dir, test_years=test_years, forecast_years=(), show_plots=True,
-                                ama_ina_list=test_ama_ina)
-                actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
-                                                                      already_cropped=load_rf_model,
-                                                                      test_years=test_years)
+                ma.run_analysis(
+                    actual_gw_dir,
+                    pred_gw_dir,
+                    grace_csv,
+                    use_gws=True,
+                    input_gw_file=input_gw_file,
+                    out_dir=output_dir,
+                    test_years=test_years,
+                    forecast_years=(),
+                    show_plots=True,
+                    ama_ina_list=test_ama_ina
+                )
+                actual_gw_dir, pred_gw_dir = gw.crop_final_gw_rasters(
+                    actual_gw_dir,
+                    pred_gw_dir,
+                    already_cropped=load_rf_model,
+                    test_years=test_years
+                )
     if len(sf_flt_list) == 1:
-        ma.run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, use_gws=False, out_dir=output_dir,
-                        test_years=test_years, forecast_years=())
-        ma.generate_feature_plots(output_dir + 'raster_df.csv', feature_list=('SSEBop', 'P'), test_years=test_years)
+        ma.run_analysis(
+            actual_gw_dir,
+            pred_gw_dir,
+            grace_csv,
+            use_gws=False,
+            out_dir=output_dir,
+            test_years=test_years,
+            forecast_years=()
+        )
 
 
 if __name__ == '__main__':
-    run_gw(analyze_only=False, load_files=True, load_rf_model=False, subsidence_analysis=False, load_df=False,
-           ama_ina_train=True)
+    run_gw(
+        analyze_only=False,
+        load_files=True,
+        load_rf_model=False,
+        subsidence_analysis=True,
+        load_df=False,
+        ama_ina_train=False
+    )

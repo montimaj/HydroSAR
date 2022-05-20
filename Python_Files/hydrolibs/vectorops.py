@@ -81,9 +81,13 @@ def clip_vectors(input_vector_dir, clip_file, outdir, gdal_path='/usr/local/Cell
     """
 
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parellel_vector_clip)(shp_file, clip_file=clip_file, outdir=outdir,
-                                                             gdal_path=gdal_path, extent_clip=extent_clip)
-                               for shp_file in glob(input_vector_dir + '*.shp'))
+    Parallel(n_jobs=num_cores)(delayed(parellel_vector_clip)(
+        shp_file,
+        clip_file=clip_file,
+        outdir=outdir,
+        gdal_path=gdal_path,
+        extent_clip=extent_clip
+    ) for shp_file in glob(input_vector_dir + '*.shp'))
 
 
 def parellel_vector_clip(shp_file, clip_file, outdir, gdal_path, extent_clip):
@@ -99,7 +103,13 @@ def parellel_vector_clip(shp_file, clip_file, outdir, gdal_path, extent_clip):
     """
 
     out_shp = outdir + shp_file[shp_file.rfind(os.sep) + 1:]
-    clip_vector(shp_file, clip_file, output_shp_file=out_shp, gdal_path=gdal_path, extent_clip=extent_clip)
+    clip_vector(
+        shp_file,
+        clip_file,
+        output_shp_file=out_shp,
+        gdal_path=gdal_path,
+        extent_clip=extent_clip
+    )
 
 
 def csv2shp(input_csv_file, outfile_path, delim=',', source_crs='epsg:4326', target_crs='epsg:4326',
@@ -201,11 +211,16 @@ def add_attribute_well_reg_multiple(input_well_reg_file, input_gw_csv_dir, out_g
 
     num_cores = multiprocessing.cpu_count() - 1
     print('Updating Well Registry shapefiles...\n')
-    Parallel(n_jobs=num_cores - 1)(delayed(parallel_add_attribute_well_reg)(input_well_reg_file, input_gw_csv_file,
-                                                                            out_gw_shp_dir, fill_attr, filter_attr,
-                                                                            filter_attr_value, use_only_ama_ina,
-                                                                            **kwargs)
-                                   for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
+    Parallel(n_jobs=num_cores - 1)(delayed(parallel_add_attribute_well_reg)(
+        input_well_reg_file,
+        input_gw_csv_file,
+        out_gw_shp_dir,
+        fill_attr,
+        filter_attr,
+        filter_attr_value,
+        use_only_ama_ina,
+        **kwargs
+    ) for input_gw_csv_file in glob(input_gw_csv_dir + '*.csv'))
 
 
 def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_gw_shp_dir, fill_attr='AF Pumped',
@@ -228,10 +243,19 @@ def parallel_add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_
     :return: None
     """
 
-    out_well_reg_file = out_gw_shp_dir + input_gw_csv_file[input_gw_csv_file.rfind(os.sep) + 1:
-                                                           input_gw_csv_file.rfind('.')] + '.shp'
-    add_attribute_well_reg(input_well_reg_file, input_gw_csv_file, out_well_reg_file, fill_attr, filter_attr,
-                           filter_attr_value, use_only_ama_ina, **kwargs)
+    out_well_reg_file = out_gw_shp_dir + input_gw_csv_file[
+                                         input_gw_csv_file.rfind(os.sep) + 1: input_gw_csv_file.rfind('.')
+                                         ] + '.shp'
+    add_attribute_well_reg(
+        input_well_reg_file,
+        input_gw_csv_file,
+        out_well_reg_file,
+        fill_attr,
+        filter_attr,
+        filter_attr_value,
+        use_only_ama_ina,
+        **kwargs
+    )
 
 
 def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
@@ -249,7 +273,13 @@ def gdf2shp(input_df, geometry, source_crs, target_crs, outfile_path):
     gdf = gpd.GeoDataFrame(input_df, crs=crs, geometry=geometry)
     gdf.to_file(outfile_path)
     if target_crs != source_crs:
-        reproject_vector(outfile_path, outfile_path=outfile_path, crs=target_crs, crs_from_file=False, ref_file=None)
+        reproject_vector(
+            outfile_path,
+            outfile_path=outfile_path,
+            crs=target_crs,
+            crs_from_file=False,
+            ref_file=None
+        )
 
 
 def shp2raster(input_shp_file, outfile_path, value_field=None, value_field_pos=0, xres=1000., yres=1000., gridding=True,
@@ -325,11 +355,17 @@ def csvs2shps(input_dir, output_dir, pattern='*.csv', target_crs='EPSG:4326', de
         outfile_path = output_dir + '{}.shp'.format(
             file[file.rfind(os.sep) + 1: file.rfind('.')]
         )
-        csv2shp(file, outfile_path=outfile_path, delim=delim, target_crs=target_crs, long_lat_pos=long_lat_pos)
+        csv2shp(
+            file,
+            outfile_path=outfile_path,
+            delim=delim,
+            target_crs=target_crs,
+            long_lat_pos=long_lat_pos
+        )
 
 
-def shps2rasters(input_dir, output_dir, burn_value=None, value_field=None, value_field_pos=0, xres=1000, yres=1000, gridding=True,
-                 smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+def shps2rasters(input_dir, output_dir, burn_value=None, value_field=None, value_field_pos=0, xres=1000, yres=1000,
+                 gridding=True, smoothing=4800, gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
     """
     Convert all shapefiles to corresponding TIFF files
     :param input_dir: Input directory containing Shapefiles which are named as <Layer_Name>_<Year>.shp
@@ -348,11 +384,16 @@ def shps2rasters(input_dir, output_dir, burn_value=None, value_field=None, value
     """
 
     num_cores = multiprocessing.cpu_count() - 2
-    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(shp_file, output_dir=output_dir, burn_value=burn_value,
-                                                            value_field=value_field, value_field_pos=value_field_pos,
-                                                            xres=xres, yres=yres, gdal_path=gdal_path,
-                                                            gridding=gridding, smoothing=smoothing)
-                               for shp_file in glob(input_dir + '*.shp'))
+    Parallel(n_jobs=num_cores)(delayed(parallel_shp2raster)(
+        shp_file,
+        output_dir=output_dir,
+        burn_value=burn_value,
+        value_field=value_field,
+        value_field_pos=value_field_pos,
+        xres=xres, yres=yres,
+        gdal_path=gdal_path,
+        gridding=gridding, smoothing=smoothing
+    ) for shp_file in glob(input_dir + '*.shp'))
 
 
 def parallel_shp2raster(shp_file, output_dir, burn_value=None, value_field=None, value_field_pos=0, xres=1000,
@@ -375,8 +416,18 @@ def parallel_shp2raster(shp_file, output_dir, burn_value=None, value_field=None,
     """
 
     outfile_path = output_dir + shp_file[shp_file.rfind(os.sep) + 1: shp_file.rfind('.') + 1] + 'tif'
-    shp2raster(shp_file, outfile_path=outfile_path, value_field=value_field, value_field_pos=value_field_pos, xres=xres,
-               yres=yres, burn_value=burn_value, gdal_path=gdal_path, gridding=gridding, smoothing=smoothing)
+    shp2raster(
+        shp_file,
+        outfile_path=outfile_path,
+        value_field=value_field,
+        value_field_pos=value_field_pos,
+        xres=xres,
+        yres=yres,
+        burn_value=burn_value,
+        gdal_path=gdal_path,
+        gridding=gridding,
+        smoothing=smoothing
+    )
 
 
 def extract_gdb_data(input_gdb_dir, attr_name, year_list, outdir, source_crs='epsg:4326', target_crs='epsg:4326',
@@ -398,11 +449,15 @@ def extract_gdb_data(input_gdb_dir, attr_name, year_list, outdir, source_crs='ep
     gdb_data = gpd.read_file(input_gdb_dir, driver='FileGDB', layer=num_layers - 1)
     attr_list = [attr_name + '_' + str(year) for year in year_list]
     num_cores = multiprocessing.cpu_count()
-    Parallel(n_jobs=num_cores)(delayed(parallel_gdb_extract)(gdb_data, index=index, attr=attr, year_list=year_list,
-                                                             outdir=outdir, source_crs=source_crs,
-                                                             target_crs=target_crs, shpfile=shpfile,
-                                                             shp_file_prefix=shp_file_prefix)
-                               for index, attr in enumerate(attr_list))
+    Parallel(n_jobs=num_cores)(delayed(parallel_gdb_extract)(
+        gdb_data,
+        index=index,
+        attr=attr,
+        year_list=year_list,
+        outdir=outdir, source_crs=source_crs,
+        target_crs=target_crs, shpfile=shpfile,
+        shp_file_prefix=shp_file_prefix
+    ) for index, attr in enumerate(attr_list))
 
 
 def parallel_gdb_extract(gdb_data, index, attr, year_list, outdir, source_crs='epsg:4326', target_crs='epsg:4326',
@@ -425,8 +480,13 @@ def parallel_gdb_extract(gdb_data, index, attr, year_list, outdir, source_crs='e
     print('Writing...', attr)
     if shpfile:
         outfile += '.shp'
-        gdf2shp(gdb_data[attr], geometry=gdb_data['geometry'], source_crs=source_crs, target_crs=target_crs,
-                outfile_path=outfile)
+        gdf2shp(
+            gdb_data[attr],
+            geometry=gdb_data['geometry'],
+            source_crs=source_crs,
+            target_crs=target_crs,
+            outfile_path=outfile
+        )
     else:
         outfile += '.csv'
         df = gdb_data[[attr, 'geometry']]
@@ -448,3 +508,31 @@ def extract_polygons(input_shp_file, out_dir, label_attr='GMD_label'):
         outfile = out_dir + label + '.shp'
         feature = input_shp_file[input_shp_file[label_attr] == label]
         feature.to_file(outfile)
+
+
+def create_alfalfa_mf_rasters(alfalfa_mf_shp_file, output_dir, year_list, xres=2000, yres=2000,
+                              gdal_path='/usr/local/Cellar/gdal/2.4.2/bin/'):
+    """
+    Create alfalfa multiplication factor (MF) rasters based on the Alfalfa MF shapefile
+    :param alfalfa_mf_shp_file: Alfalfa MF shapefile path
+    :param output_dir: Output raster directory
+    :param year_list: List of years
+    :param xres: Pixel width in geographic units
+    :param yres: Pixel height in geographic units
+    :param gdal_path: GDAL directory path, in Windows replace with OSGeo4W directory path, e.g. '/usr/bin/gdal/' on
+    Linux or Mac and 'C:/OSGeo4W64/' on Windows, the '/' at the end is mandatory
+    :return: None
+    """
+
+    for year in year_list:
+        output_file = output_dir + 'Alfalfa_MF_{}.tif'.format(year)
+        print('Writing', output_file, '...')
+        shp2raster(
+            alfalfa_mf_shp_file,
+            outfile_path=output_file,
+            value_field=str(year),
+            xres=xres,
+            yres=yres,
+            gdal_path=gdal_path,
+            gridding=False
+        )
