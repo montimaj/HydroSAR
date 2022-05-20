@@ -818,39 +818,41 @@ class HydroML:
             mask_input_dir_list = [self.final_gw_dir] + [self.raster_mask_dir]
             actual_input_dir_list = [self.actual_gw_dir] + [self.raster_reproj_dir]
             mask_dir_list = [
-                (mask_input_dir_list, [pattern] * len(mask_input_dir_list)),
-                ([self.crop_coeff_mask_dir], [pattern]),
-                ([self.lu_mask_dir], [pattern]),
-                ([self.well_reg_mask_dir], [pattern]),
-                ([self.canal_mask_dir], [pattern]),
-                ([self.streamflow_mask_dir], [pattern]),
-                ([self.alfalfa_mask_dir], [pattern])
+                (mask_input_dir_list, [pattern] * len(mask_input_dir_list), False),
+                ([self.crop_coeff_mask_dir], [pattern], False),
+                ([self.lu_mask_dir], [pattern], False),
+                ([self.well_reg_mask_dir], [pattern], True),
+                ([self.canal_mask_dir], [pattern], True),
+                ([self.streamflow_mask_dir], [pattern], False),
+                ([self.alfalfa_mask_dir], [pattern], False)
             ]
             actual_dir_list = [
-                (actual_input_dir_list, [pattern] * len(actual_input_dir_list)),
-                (self.land_use_dir_list, [pattern] * len(self.land_use_dir_list)),
-                ([self.crop_coeff_reproj_dir], [pattern]),
-                ([self.well_reg_flt_dir], [pattern]),
-                ([self.gw_basin_canal_raster_reproj_dir], ['Canal*.tif']),
-                ([self.streamflow_reproj_dir], [pattern]),
-                ([self.alfalfa_reproj_dir], [pattern])
+                (actual_input_dir_list, [pattern] * len(actual_input_dir_list), False),
+                (self.land_use_dir_list, [pattern] * len(self.land_use_dir_list), False),
+                ([self.crop_coeff_reproj_dir], [pattern], False),
+                ([self.well_reg_flt_dir], [pattern], True),
+                ([self.gw_basin_canal_raster_reproj_dir], ['Canal*.tif'], True),
+                ([self.streamflow_reproj_dir], [pattern], False),
+                ([self.alfalfa_reproj_dir], [pattern], False)
             ]
             for mask_item, actual_item in zip(mask_dir_list, actual_dir_list):
-                mask_list, mask_pattern = mask_item
-                actual_list, actual_pattern = actual_item
+                mask_list, mask_pattern, rep = mask_item
+                actual_list, actual_pattern, rep = actual_item
                 copy_files(
                     mask_list,
                     target_dir=self.rf_data_dir,
                     year_list=year_list,
                     pattern_list=mask_pattern,
-                    verbose=verbose
+                    verbose=verbose,
+                    rep=rep
                 )
                 copy_files(
                     actual_list,
                     target_dir=self.pred_data_dir,
                     year_list=year_list,
                     pattern_list=actual_pattern,
-                    verbose=verbose
+                    verbose=verbose,
+                    rep=rep
                 )
             print('Creating dataframe...')
             gw_file = self.input_ama_ina_reproj_file
@@ -1125,7 +1127,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
             use_only_ama_ina=False,
             already_preprocessed=load_files
         )
-        gw.reproject_shapefiles(already_reprojected=False)
+        gw.reproject_shapefiles(already_reprojected=load_files)
         gw.create_gw_rasters(
             already_created=load_files,
             value_field=fill_attr,
@@ -1153,7 +1155,6 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
             already_created=load_files
         )
         gw.create_alfalfa_rasters(already_created=load_files)
-        load_files = False
         gw.create_alfalfa_mf_rasters(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
