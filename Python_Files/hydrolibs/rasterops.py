@@ -1414,7 +1414,7 @@ def postprocess_rasters(input_raster_dir, output_dir, alfalfa_mf_dir, pattern='*
         write_raster(
             gw_raster_arr,
             gw_rio_file,
-            transform=gw_raster_file.transform,
+            transform=gw_rio_file.transform,
             outfile_path=output_file
         )
 

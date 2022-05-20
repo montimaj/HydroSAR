@@ -992,9 +992,15 @@ class HydroML:
             makedirs([self.subsidence_pred_gw_dir])
             sed_thick_raster = glob(self.sed_thick_reproj_dir + '*.tif')[0]
             watershed_raster = self.gw_basin_canal_raster_reproj_dir + 'GW_Basin.tif'
-            rops.create_subsidence_pred_gw_rasters(self.pred_out_dir, self.converted_subsidence_dir, sed_thick_raster,
-                                                   watershed_raster, self.subsidence_pred_gw_dir,
-                                                   scale_to_cm=scale_to_cm, verbose=verbose)
+            rops.create_subsidence_pred_gw_rasters(
+                self.pred_out_dir,
+                self.converted_subsidence_dir,
+                sed_thick_raster,
+                watershed_raster,
+                self.subsidence_pred_gw_dir,
+                scale_to_cm=scale_to_cm,
+                verbose=verbose
+            )
         print('Subsidence and total predicted GW rasters created!')
 
     def crop_final_gw_rasters(self, actual_gw_dir, pred_gw_dir, test_years, already_cropped=False):
@@ -1250,8 +1256,8 @@ if __name__ == '__main__':
     run_gw(
         analyze_only=False,
         load_files=True,
-        load_rf_model=False,
+        load_rf_model=True,
         subsidence_analysis=True,
-        load_df=False,
-        ama_ina_train=False
+        load_df=True,
+        ama_ina_train=True
     )
