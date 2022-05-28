@@ -691,15 +691,13 @@ class HydroML:
             print('All rasters already reprojected')
 
     def create_land_use_rasters(self, class_values=(1, 2, 3), class_labels=('AGRI', 'SW', 'URBAN'),
-                                smoothing_factors=(3, 5, 3), already_created=False, post_process=False,
-                                out_mean_flt_rasters=True):
+                                smoothing_factors=(3, 5, 3), already_created=False, out_mean_flt_rasters=True):
         """
         Create land use rasters from the reclassified raster
         :param class_values: List of land use class values to consider for creating separate rasters
         :param class_labels: List of class_labels ordered according to land_uses
         :param smoothing_factors: Smoothing factor (sigma value for Gaussian filter) to use while smoothing
         :param already_created: Set True to disable land use raster generation
-        :param post_process: Set False to disable post processing based on well registry raster
         :param out_mean_flt_rasters: Set True to output mean AGRI, URBAN, and SW filtered rasters
         :return: None
         """
@@ -712,9 +710,16 @@ class HydroML:
             well_reg_raster = glob(self.well_reg_reproj_dir + '*.tif')[0]
             rops.filter_nans(well_reg_raster, self.ref_raster, outfile_path=self.well_reg_flt_file)
             is_cdl_ts = self.cdl_year is None
-            rops.create_land_use_rasters(self.land_use_dir_list, self.cdl_reclass_dir, class_values, class_labels,
-                                         smoothing_factors, self.ref_raster, self.well_reg_flt_file, post_process,
-                                         is_cdl_ts, out_mean_flt_rasters)
+            rops.create_land_use_rasters(
+                self.land_use_dir_list,
+                self.cdl_reclass_dir,
+                class_values,
+                class_labels,
+                smoothing_factors,
+                self.ref_raster,
+                is_cdl_ts,
+                out_mean_flt_rasters
+            )
         else:
             print('Land use rasters already created')
 
@@ -974,7 +979,6 @@ class HydroML:
             if use_full_extent:
                 alfalfa_dir = self.alfalfa_mf_reproj_dir
             rops.postprocess_rasters(self.pred_out_dir, output_dir, alfalfa_dir)
-            self.pred_out_dir = output_dir
         return actual_raster_dir, self.pred_out_dir
 
     def create_subsidence_pred_gw_rasters(self, scale_to_cm=False, verbose=False, already_created=False):
@@ -988,6 +992,7 @@ class HydroML:
         """
 
         self.subsidence_pred_gw_dir = make_proper_dir_name(self.output_dir + 'Subsidence_Analysis')
+        self.pred_out_dir = self.output_dir + 'Predicted_Rasters/gw_corrected_temp_holdout_NP/'
         if not already_created:
             makedirs([self.subsidence_pred_gw_dir])
             sed_thick_raster = glob(self.sed_thick_reproj_dir + '*.tif')[0]
@@ -1016,10 +1021,15 @@ class HydroML:
 
         cropped_dir = make_proper_dir_name(self.output_dir + 'Final_GW_Cropped')
         makedirs([cropped_dir])
-        actual_gw_dir, pred_gw_dir = rops.crop_final_gw_rasters(actual_gw_dir, pred_gw_dir,
-                                                                raster_mask=self.input_ama_ina_reproj_file,
-                                                                output_dir=cropped_dir, gdal_path=self.gdal_path,
-                                                                already_cropped=already_cropped, test_years=test_years)
+        actual_gw_dir, pred_gw_dir = rops.crop_final_gw_rasters(
+            actual_gw_dir,
+            pred_gw_dir,
+            raster_mask=self.input_ama_ina_reproj_file,
+            output_dir=cropped_dir,
+            gdal_path=self.gdal_path,
+            already_cropped=already_cropped,
+            test_years=test_years
+        )
         return actual_gw_dir, pred_gw_dir
 
 
@@ -1075,9 +1085,8 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
                      (130.5, 195.5): 0
                      }
     drop_attrs = ('YEAR', 'AGRI_flt', 'URBAN_flt', 'SW_flt', 'CC', 'Canal_AZ', 'Canal_CO_River', 'Alfalfa')
-    test_years = range(2008, 2017)
+    test_years = range(2010, 2021)
     pred_years = range(2002, 2021)
-    # test_years = range(2002, 2021)
     exclude_vars = ('ET', 'WS_PT', 'WS_PT_ET')
     pred_attr = 'GW'
     fill_attr = 'AF Pumped'
@@ -1165,6 +1174,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
         load_gw_info = True
+        # load_files = False
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
@@ -1256,8 +1266,8 @@ if __name__ == '__main__':
     run_gw(
         analyze_only=False,
         load_files=True,
-        load_rf_model=True,
+        load_rf_model=False,
         subsidence_analysis=True,
-        load_df=True,
-        ama_ina_train=True
+        load_df=False,
+        ama_ina_train=False
     )

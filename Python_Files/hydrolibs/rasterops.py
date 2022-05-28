@@ -1229,8 +1229,7 @@ def reclassify_cdl_files(input_cdl_dir, output_dir, reclass_dict, ref_raster, gd
 
 
 def create_land_use_rasters(land_use_dir_list, cdl_reclass_dir, class_values, class_labels, smoothing_factors,
-                            ref_raster, well_reg_flt_file, post_process=False, is_cdl_ts=True,
-                            out_mean_flt_rasters=True):
+                            ref_raster, is_cdl_ts=True, out_mean_flt_rasters=True):
     """
 
     :param land_use_dir_list: Land use directory list
@@ -1239,8 +1238,6 @@ def create_land_use_rasters(land_use_dir_list, cdl_reclass_dir, class_values, cl
     :param class_labels: List of class_labels ordered according to land_uses
     :param smoothing_factors: Smoothing factor (sigma value for Gaussian filter) to use while smoothing
     :param ref_raster: Reference GW pumping raster file to filter reclassified CDL
-    :param well_reg_flt_file: Well registry filtered file for filtering land-use
-    :param post_process: Set False to disable post processing based on well registry raster
     :param is_cdl_ts: Set False if only one CDL file is used.
     :param out_mean_flt_rasters: Set True to output mean AGRI, URBAN, and SW filtered rasters
     :return: None
@@ -1270,8 +1267,6 @@ def create_land_use_rasters(land_use_dir_list, cdl_reclass_dir, class_values, cl
             apply_gaussian_filter(raster_masked, ref_file=ref_raster, outfile_path=raster_flt,
                                   sigma=smoothing_factors[idx], normalize=True, ignore_nan=False,
                                   precision=precision)
-            if post_process:
-                postprocess_rasters(raster_dir, raster_dir, well_reg_flt_file, pattern='*flt_{}.tif'.format(year))
         if out_mean_flt_rasters:
             sum_raster_flt_arr, raster_file = read_raster_as_arr(raster_flt_list[0])
             for raster_flt_file in raster_flt_list[1:]:
@@ -1471,6 +1466,8 @@ def create_streamflow_rasters(canal_raster, daily_streamflow_file, year_list, st
     dv_df_annual[flow_attr] *= 0.0283168
     flow_attr = 'dv_m3_sec'
     dv_df_annual.columns = ['Year', flow_attr]
+    dv_df_annual_file = output_dir + 'DV_DF_Annual.csv'
+    dv_df_annual.to_csv(dv_df_annual_file, index=False)
     dv_df_annual = dv_df_annual.set_index('Year')
     canal_raster_arr, canal_raster_file = read_raster_as_arr(canal_raster)
     for year in year_list:

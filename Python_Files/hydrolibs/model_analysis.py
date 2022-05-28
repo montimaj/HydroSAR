@@ -346,12 +346,12 @@ def run_analysis(actual_gw_dir, pred_gw_dir, grace_csv, out_dir, input_gw_file=N
     out_dir = make_proper_dir_name(out_dir)
     makedirs([out_dir])
     params = {
-        'legend.fontsize': 'xx-large',
+        'legend.fontsize': 'x-large',
         'figure.figsize': (15, 6),
-        'axes.labelsize': 20,
-        'axes.titlesize': 'xx-large',
-        'xtick.labelsize': 'xx-large',
-        'ytick.labelsize': 'xx-large'
+        'axes.labelsize': 15.5,
+        'axes.titlesize': 'x-large',
+        'xtick.labelsize': 'x-large',
+        'ytick.labelsize': 'x-large'
     }
     pylab.rcParams.update(params)
     if not use_gws:

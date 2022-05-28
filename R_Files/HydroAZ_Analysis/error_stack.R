@@ -12,7 +12,7 @@ actual.raster.list <- list()
 years <- seq(2010, 2020)
 k <- 1
 for (i in years) {
-  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual_2K_T/Predicted_Rasters/pred_", i, ".tif", sep=""))
+  pred.raster <- raster(paste("../../Outputs/Output_AZ_Annual/Predicted_Rasters/gw_corrected_temp_holdout_NP/pred_", i, ".tif", sep=""))
   actual.raster <- raster(paste("../../Inputs/Files_AZ_Annual/RF_Data/GW_", i, ".tif", sep=""))
   
   wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
@@ -39,13 +39,22 @@ min_value_actual  <- round(min(minValue(actual.raster.stack)))
 min_value_pred  <- round(min(minValue(pred.raster.stack)))
 min_value <- min(min_value_actual, min_value_pred)
 
-max_value_actual <- round(max(maxValue(actual.raster.stack)))
-max_value_pred <- round(max(maxValue(pred.raster.stack)))
-max_value <- max(max_value_actual, max_value_pred)
-max_value <- ceiling(max_value / 100) * 100
-breaks <- seq(min_value, max_value, by=300)
-col <- topo.colors(length(breaks) - 1)
-col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
+# max_value_actual <- round(max(maxValue(actual.raster.stack)))
+# max_value_pred <- round(max(maxValue(pred.raster.stack)))
+# max_value <- max(max_value_actual, max_value_pred)
+# max_value <- ceiling(max_value / 100) * 100
+# breaks <- seq(min_value, max_value, by=300)
+# col <- topo.colors(length(breaks) - 1)
+# col <- rev(brewer.pal(n=length(breaks) - 1, name='RdYlBu'))
+max_value_mean <- 700
+min_value_mean <- min_value
+breaks_mean <- seq(min_value_mean, max_value_mean, by=70)
+#col_mean <- rev(brewer.pal(n=length(breaks_mean), name='BrBG'))
+col_mean <- c("#1D7480", "#35978F", "#80CDC1", "#C7EAE5", "#F5F5F5", "#F6E8C3", "#DFC27D", "#BF812D", "#8C510A", "#543005")
+actual.mean.raster[actual.mean.raster < min_value_mean] <- min_value_mean
+actual.mean.raster[actual.mean.raster > max_value_mean] <- max_value_mean
+pred.mean.raster[pred.mean.raster > max_value_mean] <- max_value_mean
+pred.mean.raster[pred.mean.raster < min_value_mean] <- min_value_mean
 
 min_value_error  <- round(min(minValue(err.raster.stack)))
 max_value_error <- round(max(maxValue(err.raster.stack)))
@@ -84,6 +93,19 @@ breaks_mean <- seq(min_value_mean, max_value_mean, by=220)
 col_mean <- rev(brewer.pal(n=length(breaks_mean), name='RdYlBu'))
 
 
+min_value_mean_error  <- round(minValue(err.mean.raster))
+max_value_mean_error  <- round(maxValue(err.mean.raster))
+min_value_mean_error <- floor(min_value_mean_error / 100) * 100
+max_value_mean_error <- ceiling(max_value_mean_error / 100) * 100
+min_value_mean_error <- -500
+max_value_mean_error <- 700
+breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=120)
+col_error_mean <- brewer.pal(n=length(breaks_error_mean), name='Spectral')
+err.mean.raster[err.mean.raster > max_value_mean_error] <- max_value_mean_error
+err.mean.raster[err.mean.raster < min_value_mean_error] <- min_value_mean_error
+
+
+
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/Actual_Temporal.tif", width=6, height=6, units='in', res=600)
 plot(az_map, col='grey', border='NA', xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5))
 plot(actual.mean.raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend=T, legend.args=list(text='Actual GW Pumping (mm/yr)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T, legend.shrink=0.8)
@@ -106,6 +128,7 @@ min_value_mean_error  <- round(minValue(err.mean.raster))
 max_value_mean_error  <- round(maxValue(err.mean.raster))
 min_value_mean_error <- floor(min_value_mean_error / 100) * 100
 max_value_mean_error <- ceiling(max_value_mean_error / 100) * 100
+
 breaks_error_mean <- seq(min_value_mean_error, max_value_mean_error, by=280)
 col_error_mean <- brewer.pal(n=length(breaks_error_mean), name='Spectral')
 
@@ -139,15 +162,20 @@ names(std.err.df) <- c('STD.ERR')
 num_2sig <- length(std.err.df$STD.ERR[std.err.df$STD.ERR >= -2 & std.err.df$STD.ERR <= 2])
 p_2sig <- num_2sig * 100/ length(std.err.df$STD.ERR)
 
-std.err.df$STD.ERR[std.err.df$STD.ERR < -3] <- NA
-std.err.df$STD.ERR[std.err.df$STD.ERR > 3] <- NA
+std.err.df$STD.ERR[std.err.df$STD.ERR < -2] <- NA
+std.err.df$STD.ERR[std.err.df$STD.ERR > 2] <- NA
 
 std.err.df <- na.omit(std.err.df)
+t1 <- std.err.df[std.err.df$STD.ERR != 0,]
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/SR_Temporal.tif", width=6, height=4.5, units='in', res=600)
-breaks <- seq(min(std.err.df$STD.ERR),max(std.err.df$STD.ERR),l=32)
+breaks <- seq(min(std.err.df$STD.ERR),max(std.err.df$STD.ERR),l=15)
+breaks <- seq(min(t1),max(t1),l=15)
 hist(std.err.df$STD.ERR, freq = F, main="", xlab='Standardized Residuals', breaks=breaks, cex=1.5, cex.axis=1.5, cex.lab=1.5)
+hist(t1, freq = F, main="", xlab='Standardized Residuals', breaks=breaks, cex=1.5, cex.axis=1.5, cex.lab=1.5)
 x <- seq(min(std.err.df$STD.ERR), max(std.err.df$STD.ERR), length.out=length(std.err.df$STD.ERR))
+x <- seq(min(t1), max(t1), length.out=length(t1))
 dist <- dnorm(x, mean(std.err.df$STD.ERR), sd(std.err.df$STD.ERR))
+dist <- dnorm(x, mean(t1), sd(t1))
 lines(x, dist, col = 'red')
 dev.off()
 
@@ -170,3 +198,28 @@ tiff("D:/HydroMST/Paper2/Figures_New/Temporal/QQ_Temporal.tif", width=6, height=
 qqnorm(std.err.df$STD.ERR, main = "", cex=1.5, cex.lab=1.5, cex.axis=1.5)
 qqline(std.err.df$STD.ERR, col = "red")
 dev.off()
+
+tpgw_raster <- raster("../../Outputs/Output_AZ_Annual/Subsidence_Analysis/TPGW/TPGW_2010_2020.tif")
+wgs84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+tpgw_raster = projectRaster(tpgw_raster, crs = wgs84, method = "ngb")
+max_value_mean <- 10000
+min_value_mean <- 0
+breaks_mean <- seq(min_value_mean, max_value_mean, by=1000)
+#col_mean <- rev(brewer.pal(n=length(breaks_mean), name='BrBG'))
+col_mean <- c("#1D7480", "#35978F", "#80CDC1", "#C7EAE5", "#F5F5F5", "#F6E8C3", "#DFC27D", "#BF812D", "#8C510A", "#543005")
+tpgw_raster[tpgw_raster < min_value_mean] <- min_value_mean
+tpgw_raster[tpgw_raster > max_value_mean] <- max_value_mean
+
+gw_basin <- readOGR('../../Inputs/Data/Arizona_GW/GW_Basin/Groundwater_Basin.shp')
+gw_basin <- spTransform(gw_basin, wgs84)
+
+tiff("D:/HydroMST/Paper2/Figures_New/Temporal/TPGW_2010_2020.tif", width=6, height=6, units='in', res=600)
+plot(az_map, col='grey', border='NA', xlab=list('Longitude (Degree)', cex=1.5), ylab=list('Latitude (Degree)', cex=1.5))
+plot(tpgw_raster, xlab='Longitude (Degree)', ylab='Latitude (Degree)', legend.args=list(text='TPGW (mm) (2010-2020)', side = 2, font = 1, cex = 1.5), breaks=breaks_mean, zlim=c(min_value_mean, max_value_mean), col=col_mean, box=F, axes=F, ext=plot_ext, add=T, legend.shrink=0.8)
+plot(gw_basin, col=NA, border='black', add=T)
+axis(side=2, at=c(31:37), cex.axis=1.5)
+axis(side=1, at=c(-115:-109), cex.axis=1.5)
+# axis(side=2, at=c(37:40))
+# axis(side=1, at=c(-103:-94))
+dev.off()
+
