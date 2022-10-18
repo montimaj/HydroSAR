@@ -143,11 +143,11 @@ dev.off()
 
 
 tiff("D:/HydroMST/Paper2/Figures_New/Temporal/AP_Temporal.tif", width=10, height=7, units='in', res=600)
-plot(pred.mean.raster, actual.mean.raster, xlab='Predicted GW Pumping (mm/yr)',
+plot(pred.mean.raster, actual.mean.raster, xlab='Actual GW Pumping (mm/yr)',
      ylab='Actual GW Pumping (mm/yr)', cex=2, cex.axis=2, cex.lab=2)
 legend(1200, 500, bty = 'n', legend = c("1:1 relationship"), cex=2,
        col = c("red"), lty = 1)
-segments(x0=0,y0=0,x1=maxValue(pred.mean.raster),
+segments(x0=0,y0=0,x1=maxValue(actual.mean.raster),
          y1=maxValue(actual.mean.raster),col="red")
 dev.off()
 

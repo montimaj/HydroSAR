@@ -86,8 +86,8 @@ pred.mean.raster <- mean(pred.raster.stack)
 tiff("D:/HydroMST/Paper2/Figures_New/Spatial/AP_HAR_S.tif", width=7, height=5, units='in', res=600)
 plot(pred.mean.raster, actual.mean.raster, xlab='Predicted GW Pumping (mm/yr)',
      ylab='Actual GW Pumping (mm/yr)', cex=1.5, cex.axis=1.5, cex.lab=1.5)
-legend(100, 1400, bty = 'n', legend = c("1:1 relationship"), col = c("red"), lty = 1, cex = 1.5)
-segments(x0=0,y0=0,x1=maxValue(pred.mean.raster),
+legend(600, 400, bty = 'n', legend = c("1:1 relationship"), col = c("red"), lty = 1, cex = 1.5)
+segments(x0=0,y0=0,x1=maxValue(actual.mean.raster),
          y1=maxValue(actual.mean.raster),col="red")
 dev.off()
 
