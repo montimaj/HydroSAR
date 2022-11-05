@@ -1173,8 +1173,7 @@ def run_gw(analyze_only=False, load_files=True, load_rf_model=False, load_df=Fal
         gw.create_alfalfa_mf_rasters(xres=xres, yres=yres, already_created=load_files)
         gw.reproject_rasters(already_reprojected=load_files)
         gw.create_mean_crop_coeff_raster(already_created=load_files)
-        load_gw_info = True
-        # load_files = False
+        load_gw_info = False
         for idx, sf in enumerate(sf_flt_list):
             gw.create_land_use_rasters(already_created=load_files, smoothing_factors=(sf, sf, sf))
             ws_pattern_list = ws_stress_dict['temporal']
@@ -1267,7 +1266,7 @@ if __name__ == '__main__':
         analyze_only=False,
         load_files=True,
         load_rf_model=False,
-        subsidence_analysis=True,
+        subsidence_analysis=False,
         load_df=False,
         ama_ina_train=False
     )

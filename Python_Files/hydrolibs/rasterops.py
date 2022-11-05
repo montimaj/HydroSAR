@@ -1468,7 +1468,11 @@ def create_streamflow_rasters(canal_raster, daily_streamflow_file, year_list, st
     dv_df_annual.columns = ['Year', flow_attr]
     dv_df_annual_file = output_dir + 'DV_DF_Annual.csv'
     dv_df_annual.to_csv(dv_df_annual_file, index=False)
-    dv_df_annual = dv_df_annual.set_index('Year')
+    # input_dir = daily_streamflow_file[:daily_streamflow_file.rfind('/') + 1]
+    # flow_attr = 'dv_af'
+    # dv_df_annual = pd.read_csv(input_dir + 'LFnatFlow1906-2022.2022.5.2.csv')  # Lee's Ferry
+    # dv_df_annual[flow_attr] *= 1233.48
+    # dv_df_annual = dv_df_annual.set_index('Year')
     canal_raster_arr, canal_raster_file = read_raster_as_arr(canal_raster)
     for year in year_list:
         canal_arr = deepcopy(canal_raster_arr)
