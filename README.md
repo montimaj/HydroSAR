@@ -38,7 +38,7 @@ note = {e14757 HYP-21-0791.R2}
 }
 ```
 
-## Acknowlegments
+## Acknowledgments
 We would like to acknowledge funding from the NASA Terrestrial Hydrology Program, Grant number 80NSSC21K0979. We are grateful to all the opensource software and data communities for making their resources publicly available and would like to acknowledge USGS (https://earlywarning.usgs.gov/ssebop/modis, https://www.usgs.gov/national-hydrography/access-national-hydrography-products), USDA (https://nassgeodata.gmu.edu/CropScape/), and the PRISM group (http://www.prism.oregonstate.edu/) for providing the required remote sensing products. We also thank the ADWR (https://infoshare.azwater.gov/docushare/dsweb/View/Collection-72) for providing the necessary data sets related to groundwater withdrawals, land subsidence, and other shapefiles used in this research. Finally, we would like to convey our gratitude to our colleagues and families for their continuous motivation and support. Any opinions, findings, conclusions, or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of the funding agencies.
 
 <img src="Workflow/nasa-logo-web-rgb.png" height="80"/> &nbsp; <img src="Workflow/CSU-Signature-357-617.png" height="80"/>
