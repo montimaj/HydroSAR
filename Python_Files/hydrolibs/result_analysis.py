@@ -1,5 +1,5 @@
 # Author: Sayantan Majumdar
-# Email: smxnv@mst.edu
+# Email: sayantan.majumdar@colostate.edu
 
 import pandas as pd
 from Python_Files.hydrolibs.sysops import makedirs

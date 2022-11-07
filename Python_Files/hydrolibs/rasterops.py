@@ -1,5 +1,5 @@
 # Author: Sayantan Majumdar
-# Email: smxnv@mst.edu
+# Email: sayantan.majumdar@colostate.edu
 
 import matplotlib.pyplot as plt
 import rasterio as rio
